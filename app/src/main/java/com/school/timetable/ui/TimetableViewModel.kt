@@ -115,6 +115,17 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         }
     }
 
+    /**
+     * Re-reads the active timetable from the repository and pushes it to _schedules.
+     * Call this after ANY mutation that saves timetable data, so the main screen
+     * always reflects the real persisted state.
+     */
+    private fun refreshSchedules() {
+        _schedules.value = repository.getTimetable()
+        _profiles.value = repository.getAllProfiles()
+        calculateCurrentPeriod(_currentDay.value, currentTime24ForLogic)
+    }
+
     fun updateSubject(subject: Subject, newName: String, newTeacher: String, newStart: String, newEnd: String) {
         val updatedSubject = subject.copy(name = newName, teacher = newTeacher, startTime = newStart, endTime = newEnd)
         
@@ -150,14 +161,10 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun commitWorkingSchedules() {
         val pId = _viewingProfileId.value ?: repository.getActiveProfileId()
         _slidePanelSchedules.value = _workingSchedules.value
-        
-        if (pId == repository.getActiveProfileId()) {
-            _schedules.value = _workingSchedules.value
-            calculateCurrentPeriod(_currentDay.value, currentTime24ForLogic)
-        }
         repository.saveTimetable(pId, _workingSchedules.value)
-        _profiles.value = repository.getAllProfiles()
         _hasUnsavedChanges.value = false
+        // Re-read from repository so main screen always shows what was actually saved.
+        refreshSchedules()
     }
 
     fun discardWorkingSchedules() {
@@ -166,25 +173,65 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     }
 
     fun getGlobalBellTimings(): List<Subject> {
-        // Extract one representative list of timings from Monday (or first available day)
-        // Since timings are global, they align across days.
-        val firstDay = _workingSchedules.value.firstOrNull() ?: return emptyList()
+        // Read from the live active schedules, not the working copy.
+        // This ensures the Bell Timing dialog always shows the real saved timings.
+        val firstDay = _schedules.value.firstOrNull() ?: return emptyList()
         return firstDay.subjects
     }
 
     fun updateGlobalBellTiming(periodIndex: Int, newStartTime: String, newEndTime: String) {
-        val updatedMap = _workingSchedules.value.map { day ->
+        // Build a map of one period change and delegate to the batch function.
+        val timingMap = mapOf(periodIndex to Pair(newStartTime, newEndTime))
+        applyBellTimings(timingMap)
+    }
+
+    /**
+     * Atomically applies all bell timing changes in a single pass.
+     * This avoids multiple intermediate StateFlow emissions and ensures the
+     * main screen updates once with ALL changes applied.
+     *
+     * @param timings map of periodIndex -> Pair(startTime, endTime)
+     */
+    fun saveAllBellTimings(timings: List<Subject>) {
+        // Build lookup: periodIndex -> (startTime, endTime)
+        val timingMap = timings.associate { it.periodIndex to Pair(it.startTime, it.endTime) }
+        applyBellTimings(timingMap)
+    }
+
+    private fun applyBellTimings(timingMap: Map<Int, Pair<String, String>>) {
+        // Compute the updated schedules from the current live data.
+        val updatedSchedules = _schedules.value.map { day ->
             day.copy(subjects = day.subjects.map { subject ->
-                if (subject.periodIndex == periodIndex) {
-                    subject.copy(startTime = newStartTime, endTime = newEndTime)
+                val newTiming = timingMap[subject.periodIndex]
+                if (newTiming != null) {
+                    subject.copy(startTime = newTiming.first, endTime = newTiming.second)
                 } else {
                     subject
                 }
             })
         }
-        
-        _workingSchedules.value = updatedMap
-        _hasUnsavedChanges.value = true
+
+        // Persist to the active profile first.
+        val activeProfileId = repository.getActiveProfileId()
+        repository.saveTimetable(activeProfileId, updatedSchedules)
+
+        // Also keep the working schedules in sync (for when the slide panel is open).
+        if (_workingSchedules.value.isNotEmpty()) {
+            val updatedWorking = _workingSchedules.value.map { day ->
+                day.copy(subjects = day.subjects.map { subject ->
+                    val newTiming = timingMap[subject.periodIndex]
+                    if (newTiming != null) {
+                        subject.copy(startTime = newTiming.first, endTime = newTiming.second)
+                    } else {
+                        subject
+                    }
+                })
+            }
+            _workingSchedules.value = updatedWorking
+        }
+
+        // Re-read from repository so main screen reflects exactly what was saved.
+        refreshSchedules()
     }
 
     fun createNewProfile(name: String, copyFromActive: Boolean = false) {
@@ -223,9 +270,8 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             it.copy(isActive = it.id == profileId)
         }
         repository.saveAllProfiles(currentProfiles)
-        _profiles.value = repository.getAllProfiles()
-        _schedules.value = repository.getTimetable()
-        calculateCurrentPeriod(_currentDay.value, currentTime24ForLogic)
+        // Re-read from repository so main screen immediately shows new active profile.
+        refreshSchedules()
     }
 
     fun toggleSlidePanel() {

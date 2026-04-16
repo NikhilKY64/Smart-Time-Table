@@ -531,10 +531,10 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
         subjectToEdit?.let { sub ->
             EditCellDialog(
                 subject = sub,
-                is24HourFormat = is24HourFormatSetting,
                 onDismiss = { subjectToEdit = null },
-                onSave = { name, teacher, start, end ->
-                    viewModel.updateSubject(sub, name, teacher, start, end)
+                onSave = { name, teacher ->
+                    // Times come from the subject unchanged — only name/teacher are editable here.
+                    viewModel.updateSubject(sub, name, teacher, sub.startTime, sub.endTime)
                     subjectToEdit = null
                 }
             )
@@ -728,7 +728,7 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
                                 }
                             }
                             Spacer(modifier = Modifier.weight(1f))
-                            Text("Smart Timetable v1.0", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            Text("Smart Timetable v1.1", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                         }
                     }
                 }
@@ -740,9 +740,12 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
         val timings = viewModel.getGlobalBellTimings()
         BellTimingEditorDialog(
             timings = timings,
+            is24HourFormat = is24HourFormatSetting,
             onDismiss = { showBellTimingDialog = false },
             onSave = { updated ->
-                updated.forEach { viewModel.updateGlobalBellTiming(it.periodIndex, it.startTime, it.endTime) }
+                // Single atomic call updates _schedules, _workingSchedules, persists,
+                // and recalculates current period all in one pass.
+                viewModel.saveAllBellTimings(updated)
                 showBellTimingDialog = false
             }
         )
@@ -1065,41 +1068,22 @@ fun ProfileCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TimePickerDialogWrapper(initialTime: String, onTimeSelected: (String) -> Unit, onDismiss: () -> Unit) {
-    val initialSplit = initialTime.split(":")
-    val h = initialSplit.getOrNull(0)?.toIntOrNull() ?: 12
-    val m = initialSplit.getOrNull(1)?.toIntOrNull() ?: 0
-    val timePickerState = androidx.compose.material3.rememberTimePickerState(initialHour = h, initialMinute = m, is24Hour = true)
-    
-    AlertDialog(
-         onDismissRequest = onDismiss,
-         title = { Text("Select Time") },
-         text = { androidx.compose.material3.TimePicker(state = timePickerState) },
-         confirmButton = {
-             TextButton(onClick = {
-                 onTimeSelected(String.format(java.util.Locale.getDefault(), "%02d:%02d", timePickerState.hour, timePickerState.minute))
-             }) { Text("OK") }
-         },
-         dismissButton = {
-             TextButton(onClick = onDismiss) { Text("Cancel") }
-         }
-    )
-}
 
 @Composable
 fun BellTimingEditorDialog(
     timings: List<Subject>,
+    is24HourFormat: Boolean,
     onDismiss: () -> Unit,
     onSave: (List<Subject>) -> Unit
 ) {
-     var editedTimings by remember { mutableStateOf(timings) }
+     var editedTimings by remember(timings) { mutableStateOf(timings) }
      var pickerContext by remember { mutableStateOf<Triple<Int, Boolean, String>?>(null) } // index, isStart, initialTime
 
      if (pickerContext != null) {
-          TimePickerDialogWrapper(
-               initialTime = pickerContext!!.third,
+          WheelTimePickerDialog(
+               initialTime24h = pickerContext!!.third,
+               is24HourFormat = is24HourFormat,
+               onDismiss = { pickerContext = null },
                onTimeSelected = { newTime ->
                    val ctx = pickerContext!!
                    editedTimings = editedTimings.toMutableList().apply {
@@ -1107,8 +1091,7 @@ fun BellTimingEditorDialog(
                        this[ctx.first] = updated
                    }
                    pickerContext = null
-               },
-               onDismiss = { pickerContext = null }
+               }
           )
      }
 

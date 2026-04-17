@@ -1,50 +1,36 @@
+# IDE / Project Specific
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-
-# Gradle and JVM
 .gradle/
-build/
-output/
-tmp/
-*.class
-
-# Local configuration file (keys, API tokens, local paths)
+.kotlin/
+.idea/
 local.properties
-
-# Build output directories
+/build/
 /app/build/
 /app/release/
 /app/debug/
-
-# Android Studio Navigation editor temp files
+.externalNativeBuild/
+.cxx/
+captures/
 .navigation/
 
-# Android Studio captures folder
-captures/
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Keystore files (do not commit your signing keys!)
+# Logs & Temp
+*.log
+*.tmp
+*.bak
+
+# Keystore files
 *.jks
 *.keystore
 
-# External native build folder generated in Android Studio 2.2 and later
-.externalNativeBuild
-.cxx/
-
-# NDK
-obj/
+# Build artifacts
+output/
+tmp/
+*.class
 
 # CMake
 CMakeLists.txt.user
@@ -58,3 +44,4 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+

@@ -10,12 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModelProvider
 import com.school.timetable.data.TimetableRepository
-import com.school.timetable.ui.TimetableScreen
 import com.school.timetable.ui.TimetableViewModel
 import com.school.timetable.ui.TimetableViewModelFactory
-import com.school.timetable.ui.theme.SmartTimetableTheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 
 class MainActivity : ComponentActivity() {
 
@@ -33,17 +29,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         val repository = TimetableRepository(applicationContext)
-        val viewModelFactory = TimetableViewModelFactory(repository)
-        val viewModel = ViewModelProvider(this, viewModelFactory)[TimetableViewModel::class.java]
+        val viewModel = TimetableViewModel(repository)
 
         setContent {
-            val isDark by viewModel.isDarkMode.collectAsState()
-            SmartTimetableTheme(darkTheme = isDark) {
-                TimetableScreen(
-                    viewModel = viewModel,
-                    onToggleOverlay = { toggleOverlay() }
-                )
+            var isOverlayActive by androidx.compose.runtime.remember { 
+                androidx.compose.runtime.mutableStateOf(TimetableOverlayService.isRunning) 
             }
+            
+            App(
+                viewModel = viewModel,
+                onToggleOverlay = { 
+                    toggleOverlay()
+                    isOverlayActive = TimetableOverlayService.isRunning
+                },
+                isOverlayActive = isOverlayActive
+            )
         }
     }
     

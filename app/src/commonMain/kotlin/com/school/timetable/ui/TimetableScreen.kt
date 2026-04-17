@@ -50,7 +50,11 @@ import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit = {}) {
+fun TimetableScreen(
+    viewModel: TimetableViewModel,
+    onToggleOverlay: () -> Unit,
+    isOverlayActive: Boolean = false
+) {
     val schedules by viewModel.schedules.collectAsState()
     val currentDay by viewModel.currentDay.collectAsState()
     val currentTime by viewModel.currentTimeFormat.collectAsState()
@@ -107,9 +111,8 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
     val mainListState = rememberLazyListState()
     val overlayWeeklyScrollState = rememberScrollState()
     
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val screenMultiplier = (configuration.screenWidthDp / 800f).coerceIn(1f, 1.2f)
+    val screenMultiplier = 1.1f 
     val cardWidthPx = with(density) { ((140 * screenMultiplier) + 12).dp.toPx() }.toInt()
     
     var firstLoad by remember { mutableStateOf(true) }
@@ -143,21 +146,21 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 32.dp),
+                        .padding(horizontal = 24.dp, vertical = if (isOverlayActive) 12.dp else 32.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
                         Text(
                             text = dayName,
-                            fontSize = 40.sp,
+                            fontSize = if (isOverlayActive) 24.sp else 40.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "$className • $currentTime",
-                            fontSize = 18.sp,
+                            fontSize = if (isOverlayActive) 12.sp else 18.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable { isEditingName = true }.padding(vertical = 4.dp)
@@ -169,57 +172,67 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
                             modifier = Modifier
                                 .clickable { onToggleOverlay() }
                                 .clip(RoundedCornerShape(8.dp)),
-                            color = AccentSecondary.copy(alpha = 0.1f),
+                            color = if (isOverlayActive) AccentSecondary else AccentSecondary.copy(alpha = 0.1f),
                             shape = RoundedCornerShape(8.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, AccentSecondary.copy(0.3f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(
+                                    horizontal = if (isOverlayActive) 8.dp else 12.dp, 
+                                    vertical = if (isOverlayActive) 6.dp else 10.dp
+                                ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Overlay", color = AccentSecondary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        // Theme Toggle button
-                        Surface(
-                            modifier = Modifier
-                                .clickable { viewModel.toggleTheme() }
-                                .clip(RoundedCornerShape(8.dp)),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Theme", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        // Settings button
-                        Surface(
-                            modifier = Modifier
-                                .clickable { showSettingsDialog = true }
-                                .clip(RoundedCornerShape(8.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings",
-                                    tint = Color.White
-                                )
-                                Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "Settings", 
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = if (isOverlayActive) "Pinned" else "Overlay", 
+                                    color = if (isOverlayActive) Color.White else AccentSecondary, 
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = if (isOverlayActive) 11.sp else 14.sp
                                 )
+                            }
+                        }
+
+                        if (!isOverlayActive) {
+                            // Theme Toggle button
+                            Surface(
+                                modifier = Modifier
+                                    .clickable { viewModel.toggleTheme() }
+                                    .clip(RoundedCornerShape(8.dp)),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Theme", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            // Settings button
+                            Surface(
+                                modifier = Modifier
+                                    .clickable { showSettingsDialog = true }
+                                    .clip(RoundedCornerShape(8.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings",
+                                        tint = Color.White
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Settings", 
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
                     }
@@ -228,18 +241,27 @@ fun TimetableScreen(viewModel: TimetableViewModel, onToggleOverlay: () -> Unit =
                 if (todaySchedule != null) {
                     LazyRow(
                         state = mainListState,
-                        modifier = Modifier.fillMaxWidth().weight(0.55f),
+                        modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f),
                         contentPadding = PaddingValues(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (isOverlayActive) 12.dp else 20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         items(todaySchedule.subjects, key = { it.id }) { subject ->
-                            ModernTimetableCard(
-                                subject = subject,
-                                isCurrent = subject.id == currentPeriodId,
-                                timeFormatter = formatTime,
-                                onClick = { subjectToEdit = subject }
-                            )
+                            if (isOverlayActive) {
+                                CompactTimetableCard(
+                                    subject = subject,
+                                    isCurrent = subject.id == currentPeriodId,
+                                    timeFormatter = formatTime,
+                                    onClick = { subjectToEdit = subject }
+                                )
+                            } else {
+                                ModernTimetableCard(
+                                    subject = subject,
+                                    isCurrent = subject.id == currentPeriodId,
+                                    timeFormatter = formatTime,
+                                    onClick = { subjectToEdit = subject }
+                                )
+                            }
                         }
                     }
                 } else {
@@ -776,8 +798,7 @@ fun ModernTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val screenMultiplier = (configuration.screenWidthDp / 800f).coerceIn(1f, 1.3f)
+    val screenMultiplier = 1.1f
 
     val baseModifier = Modifier
         .scale(scale)
@@ -908,8 +929,7 @@ fun CompactTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val screenMultiplier = (configuration.screenWidthDp / 800f).coerceIn(1f, 1.2f)
+    val screenMultiplier = 1.1f
 
     val baseModifier = modifier
         .scale(scale)

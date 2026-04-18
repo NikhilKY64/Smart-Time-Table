@@ -50,8 +50,8 @@ android {
         applicationId = "com.school.timetable"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -79,7 +79,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "Smart Time Table"
-            packageVersion = "1.2.0"
+            packageVersion = "1.2.1"
             windows {
                 iconFile = project.file("../Icon.ico")
             }

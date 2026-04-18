@@ -2,6 +2,7 @@ package com.school.timetable.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -119,11 +120,17 @@ fun TimetableScreen(
     var previousPeriod by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(currentPeriodId) {
-        if (!firstLoad && currentPeriodId != previousPeriod && currentPeriodId != null) {
+        // Feature 5: Auto-Scroll on open/load
+        if (currentPeriodId != null) {
             val idx = todaySchedule?.subjects?.indexOfFirst { it.id == currentPeriodId } ?: -1
             if (idx >= 0) {
-                mainListState.animateScrollToItem(idx)
-                overlayWeeklyScrollState.animateScrollTo(idx * cardWidthPx)
+                if (isOverlayActive) {
+                    mainListState.scrollToItem(idx)
+                    overlayWeeklyScrollState.scrollTo(idx * cardWidthPx)
+                } else if (!firstLoad && currentPeriodId != previousPeriod) {
+                    mainListState.animateScrollToItem(idx)
+                    overlayWeeklyScrollState.animateScrollTo(idx * cardWidthPx)
+                }
             }
         }
         previousPeriod = currentPeriodId
@@ -153,17 +160,19 @@ fun TimetableScreen(
                     Column {
                         Text(
                             text = dayName,
-                            fontSize = if (isOverlayActive) 24.sp else 40.sp,
+                            fontSize = if (isOverlayActive) 20.sp else 32.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "$className • $currentTime",
-                            fontSize = if (isOverlayActive) 12.sp else 18.sp,
+                            fontSize = if (isOverlayActive) 14.sp else 16.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable { isEditingName = true }.padding(vertical = 4.dp)
+                            modifier = Modifier.clickable { isEditingName = true }.padding(vertical = 2.dp),
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                         )
                     }
                     
@@ -186,14 +195,44 @@ fun TimetableScreen(
                                 Text(
                                     text = if (isOverlayActive) "Pinned" else "Overlay", 
                                     color = if (isOverlayActive) Color.White else AccentSecondary, 
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = if (isOverlayActive) 11.sp else 14.sp
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = if (isOverlayActive) 10.sp else 12.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                                 )
                             }
                         }
 
+                        if (isOverlayActive) {
+                            Surface(
+                                modifier = Modifier
+                                    .clickable { onToggleOverlay() }
+                                    .clip(RoundedCornerShape(8.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Maximize",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Maximize View", 
+                                        color = Color.White, 
+                                        fontWeight = FontWeight.ExtraBold, 
+                                        fontSize = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
+                                    )
+                                }
+                            }
+                        }
+
                         if (!isOverlayActive) {
-                            // Theme Toggle button
                             Surface(
                                 modifier = Modifier
                                     .clickable { viewModel.toggleTheme() }
@@ -209,7 +248,6 @@ fun TimetableScreen(
                                 }
                             }
 
-                            // Settings button
                             Surface(
                                 modifier = Modifier
                                     .clickable { showSettingsDialog = true }
@@ -227,11 +265,7 @@ fun TimetableScreen(
                                         tint = Color.White
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "Settings", 
-                                        color = Color.White,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                    Text("Settings", color = Color.White, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -243,8 +277,7 @@ fun TimetableScreen(
                         state = mainListState,
                         modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f),
                         contentPadding = PaddingValues(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(if (isOverlayActive) 12.dp else 20.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(todaySchedule.subjects, key = { it.id }) { subject ->
                             if (isOverlayActive) {
@@ -265,58 +298,53 @@ fun TimetableScreen(
                         }
                     }
                 } else {
-                    Box(modifier = Modifier.weight(0.55f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f), contentAlignment = Alignment.Center) {
                         Text("No schedule configuration found.", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
-                // --------- Profiles Section ---------
-                Column(
-                    modifier = Modifier.fillMaxWidth().weight(0.45f).padding(24.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (!isOverlayActive) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().weight(0.45f).padding(24.dp)
                     ) {
-                        Text(
-                            "Timetable Profiles",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Surface(
-                            modifier = Modifier
-                                .clickable { showCreateProfileDialog = true }
-                                .clip(RoundedCornerShape(8.dp)),
-                            color = MaterialTheme.colorScheme.primary,
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Create New", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(profiles, key = { it.id }) { profile ->
-                            ProfileCard(
-                                profile = profile,
-                                onActiveClick = { viewModel.setActiveProfile(profile.id) },
-                                onEditClick = {
-                                    viewModel.setSlidePanel(true, profile.id)
-                                },
-                                onDeleteClick = {
-                                    viewModel.deleteProfile(profile.id)
-                                }
+                            Text(
+                                "Timetable Profiles",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
                             )
+                            Surface(
+                                modifier = Modifier
+                                    .clickable { showCreateProfileDialog = true }
+                                    .clip(RoundedCornerShape(8.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                            ) {
+                                Text("Create New", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(profiles, key = { it.id }) { profile ->
+                                ProfileCard(
+                                    profile = profile,
+                                    onActiveClick = { viewModel.setActiveProfile(profile.id) },
+                                    onEditClick = { viewModel.setSlidePanel(true, profile.id) },
+                                    onDeleteClick = { viewModel.deleteProfile(profile.id) }
+                                )
+                            }
                         }
                     }
                 }
-                // ------------------------------------
             }
 
-            // Slide Down Overlay Panel (Glassy/Overlay effect)
             AnimatedVisibility(
                 visible = isSlidePanelOpen,
                 enter = slideInVertically(
@@ -803,7 +831,7 @@ fun ModernTimetableCard(
     val baseModifier = Modifier
         .scale(scale)
         .width((220 * screenMultiplier).dp)
-        .height((280 * screenMultiplier).dp)
+        .height((220 * screenMultiplier).dp) // Reduced height for main app
         .clip(RoundedCornerShape(24.dp))
         .clickable { onClick() }
         
@@ -856,27 +884,29 @@ fun ModernTimetableCard(
                 }
             }
 
-            // Middle Section (Subject Name)
+            // Middle Section (Subject Name) - Optimized for Smart Boards
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
                 if (isBreak) {
                     Text(
                         text = "Take a Break",
-                        fontSize = (32 * screenMultiplier).sp,
+                        fontSize = (24 * screenMultiplier).sp,
                         fontWeight = FontWeight.ExtraBold,
-                        lineHeight = (38 * screenMultiplier).sp,
-                        color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface
+                        lineHeight = (30 * screenMultiplier).sp,
+                        color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                     )
                 } else {
                     Text(
                         text = subject.name,
-                        fontSize = (32 * screenMultiplier).sp,
+                        fontSize = (22 * screenMultiplier).sp,
                         fontWeight = FontWeight.ExtraBold,
-                        lineHeight = (38 * screenMultiplier).sp,
+                        lineHeight = (28 * screenMultiplier).sp,
                         color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 3
+                        maxLines = 3,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                     )
                 }
             }
@@ -886,17 +916,19 @@ fun ModernTimetableCard(
                 if (!isBreak) {
                     Text(
                         text = subject.teacher,
-                        fontSize = (14 * screenMultiplier).sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isCurrent) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary
+                        fontSize = (12 * screenMultiplier).sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isCurrent) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
                 Text(
                     text = "${timeFormatter(subject.startTime)} - ${timeFormatter(subject.endTime)}",
-                    fontSize = (16 * screenMultiplier).sp,
+                    fontSize = (13 * screenMultiplier).sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isCurrent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                 )
             }
         }
@@ -934,7 +966,7 @@ fun CompactTimetableCard(
     val baseModifier = modifier
         .scale(scale)
         .width((140 * screenMultiplier).dp)
-        .height((110 * screenMultiplier).dp)
+        .height((125 * screenMultiplier).dp)
         .clip(RoundedCornerShape(16.dp))
         .clickable { onClick() }
         .then(if (isDragged) Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)) else Modifier)
@@ -956,11 +988,10 @@ fun CompactTimetableCard(
     }
 
     Box(
-        modifier = styledModifier.padding(16.dp).then(if (isDragged) Modifier.background(Color.Transparent) else Modifier)
+        modifier = styledModifier.padding(12.dp).then(if (isDragged) Modifier.background(Color.Transparent) else Modifier)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxSize()
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -980,6 +1011,8 @@ fun CompactTimetableCard(
                 )
             }
             
+            Spacer(Modifier.height(4.dp))
+
             Text(
                 text = if (isBreak) "Break" else subject.name,
                 fontSize = (18 * screenMultiplier).sp,
@@ -987,6 +1020,8 @@ fun CompactTimetableCard(
                 color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface,
                 maxLines = 2
             )
+            
+            Spacer(modifier = Modifier.weight(1f)) // Push teacher name to bottom
             
             Text(
                 text = if (isBreak) "" else subject.teacher,

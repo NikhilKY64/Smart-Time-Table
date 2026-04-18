@@ -1,26 +1,20 @@
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.gestures.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.draw.*
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.layout.*
+import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.*
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import com.school.timetable.App
 import com.school.timetable.data.TimetableRepository
 import com.school.timetable.ui.TimetableViewModel
@@ -31,11 +25,11 @@ fun main() = application {
     var isOverlayActive by remember { mutableStateOf(false) }
     
     if (!isOverlayActive) {
-        // Main App Window
+        // Main App Window - Maximized by default for Feature 1
         Window(
             onCloseRequest = ::exitApplication, 
             title = "Smart Timetable",
-            alwaysOnTop = false
+            state = rememberWindowState(placement = WindowPlacement.Maximized)
         ) {
             App(
                 viewModel = viewModel, 
@@ -46,58 +40,128 @@ fun main() = application {
     } else {
         // Floating Slider Overlay Window
         var isExpanded by remember { mutableStateOf(true) }
+        var handleOffsetX by remember { mutableStateOf(0f) }
+        var showCustomization by remember { mutableStateOf(false) }
+        var handleAlpha by remember { mutableStateOf(1f) }
+        
+        val handleStyle by viewModel.handleStyle.collectAsState()
+        val favoriteStyles by viewModel.favoriteStyles.collectAsState()
         
         LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(3000)
+            delay(3000)
             isExpanded = false
         }
 
-        val animationProgress by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = if (isExpanded) 1f else 0f,
-            animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+        // Feature 3: Auto-transparency after delay when collapsed
+        LaunchedEffect(isExpanded) {
+            if (!isExpanded) {
+                delay(5000) // Wait 5 seconds after collapsing
+                handleAlpha = 0.2f // Fade to very subtle
+            } else {
+                handleAlpha = 1f // Restore full visibility
+            }
+        }
+
+        // Use a dynamic Window State to physically resize the window
+        val windowState = rememberWindowState(
+            width = 1200.dp, 
+            height = if (isExpanded) 400.dp else 65.dp, 
+            position = WindowPosition(Alignment.TopCenter)
         )
         
-        // We set the window height to be enough for full view
+        // Sync window height with expansion state to allow click-through
+        LaunchedEffect(isExpanded) {
+            // Add a small delay for window sync during animation
+            windowState.size = windowState.size.copy(
+                height = if (isExpanded) 400.dp else 65.dp
+            )
+        }
+        
         Window(
             onCloseRequest = { isOverlayActive = false }, 
             title = "Timetable Overlay",
             alwaysOnTop = true,
             undecorated = true,
-            transparent = true,
-            state = rememberWindowState(
-                width = 800.dp, 
-                height = 300.dp, // slightly more height for handle
-                position = WindowPosition(Alignment.TopCenter)
-            )
+            transparent = true, 
+            state = windowState
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 40.dp), 
                 contentAlignment = Alignment.TopCenter
             ) {
-                // The actual content that slides
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = (-250 * (1f - animationProgress)).dp) // Slides up by 250dp
-                        .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
-                        .padding(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Main App Content
-                    Box(modifier = Modifier.height(250.dp).fillMaxWidth()) {
-                        App(
-                            viewModel = viewModel, 
-                            onToggleOverlay = { isOverlayActive = false },
-                            isOverlayActive = true
-                        )
+                    // Feature: Adaptive Content visibility with Sliding Animation
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = slideInVertically(initialOffsetY = { -it }) + expandVertically(),
+                        exit = slideOutVertically(targetOffsetY = { -it }) + shrinkVertically()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(250.dp) 
+                                .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.98f))
+                        ) {
+                            App(
+                                viewModel = viewModel, 
+                                onToggleOverlay = { isOverlayActive = false },
+                                isOverlayActive = true
+                            )
+                        }
                     }
                     
-                    // The Handle
-                    com.school.timetable.ui.DragHandle(
-                        style = com.school.timetable.ui.HandleStyle.DEFAULT,
-                        onClick = { isExpanded = !isExpanded }
-                    )
+                    // The Handle Section with dynamic alpha
+                    val animatedAlpha by animateFloatAsState(handleAlpha)
+                    
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(handleOffsetX.roundToInt(), 0) }
+                            .graphicsLayer { alpha = animatedAlpha }
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        if (event.type == PointerEventType.Press && 
+                                            event.buttons.isSecondaryPressed) {
+                                            showCustomization = true
+                                        }
+                                    }
+                                }
+                            }
+                            .pointerInput(Unit) {
+                                detectHorizontalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    handleOffsetX += dragAmount
+                                }
+                            }
+                    ) {
+                        com.school.timetable.ui.DragHandle(
+                            style = handleStyle,
+                            onClick = { isExpanded = !isExpanded }
+                        )
+                        
+                        DropdownMenu(
+                            expanded = showCustomization,
+                            onDismissRequest = { showCustomization = false }
+                        ) {
+                            Text("Fast Styles", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            favoriteStyles.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.displayName) },
+                                    onClick = { 
+                                        viewModel.updateHandleStyle(style)
+                                        showCustomization = false 
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,25 +1,62 @@
-# Build & Run
+# Smart Time Table (Windows Pro)
 
-### Clean
+A high-performance, polished timetable application for Windows, featuring a physics-based "Smart-Hide" overlay system designed specifically for students and smart board users.
 
-```
-gradle clean
-```
+## 🚀 Getting Started
 
-### Run app
+### Prerequisites
+*   **JDK 17 or 21**: Ensure your Gradle JVM is set to Java 17 or higher.
+*   **WiX Toolset (v3.11)**: Required if you want to generate the professional `.exe` or `.msi` installers. [Download here](https://wixtoolset.org/releases/).
 
-```
-gradle :app:run
-```
-
-### Package release
-
-```
-gradlew.bat :app:createDistributable
+### Development
+To run the app directly from the source:
+```powershell
+.\gradlew.bat :app:run
 ```
 
-### Package release
+---
 
+## 📦 How to create a New Version (.EXE)
+
+When you are ready to release a new version, follow these steps:
+
+### 1. Update Version Numbers (Optional)
+Open `app/build.gradle.kts` and update these two lines:
+*   `versionName = "1.2.1"`
+*   `packageVersion = "1.2.1"`
+
+### 2. Run the Build Command
+Use the "Distribution" command to create the final installer:
+```powershell
+.\gradlew.bat :app:packageReleaseDistributionForCurrentOS
 ```
-gradle :app:packageReleaseDistributionForCurrentOS
+*   **Location**: After it finishes, your installer will be in `app/build/compose/binaries/main/exe/`.
+
+### 3. Create a Portable Folder
+If you just want a folder that runs without installing:
+```powershell
+.\gradlew.bat :app:createDistributable
 ```
+*   **Location**: `app/build/compose/binaries/main/app/`
+
+---
+
+## 🛠️ Maintenance & Data Safety
+
+### Where is the data saved?
+Your timetables and profiles are **not** saved in the app folder. They are saved in your user home directory to ensure they stay safe even if you uninstall the app:
+*   **Path**: `C:\Users\<YourUser>\.smart-timetable\profiles.json`
+*   **Backup**: To back up your timetables, just copy this `profiles.json` file.
+
+### Troubleshooting
+*   **"Unable to delete directory" error**: This means the app is still running. Close the app from the System Tray (near the clock) and try the build again.
+*   **Installer not showing in Search**: We have enabled `shortcut = true` and `menu = true`. If you don't see them, uninstall the old version from Windows Settings before installing the new one.
+
+---
+
+## ✨ Features Checklist
+*   [x] **Spring Physics**: Smooth vertical expansion and horizontal scrolling.
+*   [x] **Taskbar Integration**: Minimizes to taskbar; restores and expands on click.
+*   [x] **Smart-Hide**: Automatically wakes up at SS:55.7 and expands at SS:58.7.
+*   [x] **Visual Polish**: 12dp rounded corners, soft shadows, and linear gradients.
+*   [x] **High Capacity**: File-based storage (bypasses the 8KB Windows Registry limit).

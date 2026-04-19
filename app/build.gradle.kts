@@ -92,6 +92,9 @@ compose.desktop {
             packageVersion = "1.2.1"
             windows {
                 iconFile = project.file("../Icon.ico")
+                shortcut = true
+                menu = true
+                menuGroup = "Smart Time Table"
             }
         }
         buildTypes.release.proguard {

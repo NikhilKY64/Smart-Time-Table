@@ -30,6 +30,11 @@ Use the "Distribution" command to create the final installer:
 ```powershell
 .\gradlew.bat :app:packageReleaseDistributionForCurrentOS
 ```
+or
+```powershell
+.\gradlew :app:packageReleaseDistributionForCurrentOS
+```
+
 *   **Location**: After it finishes, your installer will be in `app/build/compose/binaries/main/exe/`.
 
 ### 3. Create a Portable Folder

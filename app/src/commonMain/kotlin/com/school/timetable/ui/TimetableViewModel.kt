@@ -1,4 +1,4 @@
-package com.school.timetable.ui
+ package com.school.timetable.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -63,6 +63,20 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     private val _favoriteStyles = MutableStateFlow<Set<HandleStyle>>(emptySet())
     val favoriteStyles: StateFlow<Set<HandleStyle>> = _favoriteStyles.asStateFlow()
 
+    private val _isNextPeriodApproaching = MutableStateFlow(false)
+    val isNextPeriodApproaching: StateFlow<Boolean> = _isNextPeriodApproaching.asStateFlow()
+
+    private val _isAutoHideOverlayEnabled = MutableStateFlow(true)
+    val isAutoHideOverlayEnabled: StateFlow<Boolean> = _isAutoHideOverlayEnabled.asStateFlow()
+
+    private val _isOverlayExpanded = MutableStateFlow(false)
+    val isOverlayExpanded: StateFlow<Boolean> = _isOverlayExpanded.asStateFlow()
+
+    private val _isSmartHideVisible = MutableStateFlow(true)
+    val isSmartHideVisible: StateFlow<Boolean> = _isSmartHideVisible.asStateFlow()
+
+    private var smartHideJob: kotlinx.coroutines.Job? = null
+
     init {
         loadData()
         startClock()
@@ -76,13 +90,15 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _is24HourFormat.value = repository.is24HourFormat()
         _handleStyle.value = repository.getHandleStyle()
         _favoriteStyles.value = repository.getFavoriteHandleStyles()
+        _isAutoHideOverlayEnabled.value = repository.isAutoHideOverlayEnabled()
     }
 
     private fun startClock() {
         viewModelScope.launch {
             while (true) {
                 val cal = Calendar.getInstance()
-                _currentDay.value = cal.get(Calendar.DAY_OF_WEEK)
+                val day = cal.get(Calendar.DAY_OF_WEEK)
+                _currentDay.value = day
                 
                 val sdf24Display = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
                 val timeString24Display = sdf24Display.format(cal.time)
@@ -90,14 +106,45 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
                 val sdf24Logic = SimpleDateFormat("HH:mm", Locale.getDefault())
                 currentTime24ForLogic = sdf24Logic.format(cal.time)
                 
+                // Pre-emptive 1.3-second detection for Auto-Peek swiping visibility
+                // Pre-emptive 4.3-second detection to wake up window early (SS:55.7)
+                val calPlus43 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 4300) }
+                if (calPlus43.get(Calendar.SECOND) == 0 && calPlus43.get(Calendar.MILLISECOND) < 150) {
+                    val nextTime = sdf24Logic.format(calPlus43.time)
+                    val schedule = _schedules.value.find { it.dayOfWeek == day }
+                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
+                    if (startingSoon) {
+                        setSmartHideVisible(true) // Silently create window
+                    }
+                }
+
+                // Pre-emptive 1.3-second detection for the actual drop-down
+                val calPlus13 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 1300) }
+                if (calPlus13.get(Calendar.SECOND) == 0 && calPlus13.get(Calendar.MILLISECOND) < 150) {
+                    val nextTime = sdf24Logic.format(calPlus13.time)
+                    val schedule = _schedules.value.find { it.dayOfWeek == day }
+                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
+                    if (startingSoon && !_isNextPeriodApproaching.value) {
+                        _isNextPeriodApproaching.value = true
+                        
+                        // Drop down!
+                        setOverlayExpanded(true)
+
+                        launch {
+                            delay(3300) // Spans 1.3s before and 2.0s after start (Total 3.3s)
+                            _isNextPeriodApproaching.value = false
+                        }
+                    }
+                }
+
                 val sdf12Display = SimpleDateFormat("hh:mm:ss a", Locale.getDefault())
                 val timeString12Display = sdf12Display.format(cal.time)
                 
                 _currentTimeFormat.value = if (_is24HourFormat.value) timeString24Display else timeString12Display
 
-                calculateCurrentPeriod(cal.get(Calendar.DAY_OF_WEEK), currentTime24ForLogic)
+                calculateCurrentPeriod(day, currentTime24ForLogic)
 
-                delay(1000) // Update every second to reflect seconds
+                delay(100) // 100ms precision for 1.5s detection
             }
         }
     }
@@ -106,7 +153,7 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         val schedule = _schedules.value.find { it.dayOfWeek == day }
         if (schedule != null) {
             val period = schedule.subjects.find { 
-                currentTime >= it.startTime && currentTime <= it.endTime
+                currentTime >= it.startTime && currentTime < it.endTime
             }
             _currentPeriodId.value = period?.id
         } else {
@@ -309,6 +356,55 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun updateHandleStyle(style: HandleStyle) {
         _handleStyle.value = style
         repository.saveHandleStyle(style)
+    }
+
+    fun setOverlayExpanded(expanded: Boolean) {
+        _isOverlayExpanded.value = expanded
+        if (expanded) {
+            _isSmartHideVisible.value = true // Wake up for notifications
+        }
+        
+        // Reset Smart-Hide timer
+        smartHideJob?.cancel()
+        if (!expanded && _isAutoHideOverlayEnabled.value) {
+            smartHideJob = viewModelScope.launch {
+                delay(5000)
+                _isSmartHideVisible.value = false
+            }
+        }
+    }
+
+    fun toggleOverlayExpanded() {
+        setOverlayExpanded(!_isOverlayExpanded.value)
+    }
+
+    fun setSmartHideVisible(visible: Boolean) {
+        _isSmartHideVisible.value = visible
+        if (visible) {
+            // If we wake it up manually, restart the timer if collapsed
+            if (!_isOverlayExpanded.value && _isAutoHideOverlayEnabled.value) {
+                smartHideJob?.cancel()
+                smartHideJob = viewModelScope.launch {
+                    delay(5000)
+                    _isSmartHideVisible.value = false
+                }
+            }
+        }
+    }
+
+    fun toggleAutoHideOverlay() {
+        val newState = !_isAutoHideOverlayEnabled.value
+        _isAutoHideOverlayEnabled.value = newState
+        repository.setAutoHideOverlayEnabled(newState)
+        
+        // If turned off, make sure we are visible
+        if (!newState) {
+            _isSmartHideVisible.value = true
+            smartHideJob?.cancel()
+        } else if (!_isOverlayExpanded.value) {
+            // If turned on while collapsed, start hiding timer
+            setOverlayExpanded(false)
+        }
     }
 
     fun toggleTimeFormat() {

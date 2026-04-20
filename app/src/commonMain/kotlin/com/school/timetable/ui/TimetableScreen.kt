@@ -21,10 +21,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +43,10 @@ import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,8 +111,7 @@ fun TimetableScreen(
         }
     }
     
-    val displayDay = if (currentDay == Calendar.SUNDAY) Calendar.MONDAY else currentDay
-    val todaySchedule = schedules.find { it.dayOfWeek == displayDay }
+    val todaySchedule = schedules.find { it.dayOfWeek == currentDay }
 
     val mainListState = rememberLazyListState()
     val overlayWeeklyScrollState = rememberScrollState()
@@ -124,12 +128,28 @@ fun TimetableScreen(
         if (currentPeriodId != null) {
             val idx = todaySchedule?.subjects?.indexOfFirst { it.id == currentPeriodId } ?: -1
             if (idx >= 0) {
+                val currentPeriod = todaySchedule?.subjects?.get(idx)
+                // Feature 5: Auto-Scroll on open/load
+                // Restricted in slider to only start from 5th period (after break)
                 if (isOverlayActive) {
-                    mainListState.scrollToItem(idx)
-                    overlayWeeklyScrollState.scrollTo(idx * cardWidthPx)
-                } else if (!firstLoad && currentPeriodId != previousPeriod) {
-                    mainListState.animateScrollToItem(idx)
-                    overlayWeeklyScrollState.animateScrollTo(idx * cardWidthPx)
+                    if ((currentPeriod?.periodIndex ?: 0) >= 5) {
+                        mainListState.scrollToItem(idx)
+                        overlayWeeklyScrollState.scrollTo(idx * cardWidthPx)
+                    }
+                } else {
+                    // In main app, always handle auto-scroll on change
+                    if (!firstLoad && currentPeriodId != previousPeriod) {
+                        mainListState.animateScrollToItem(idx)
+                        // Smoother scroll for weekly overview
+                        overlayWeeklyScrollState.animateScrollTo(
+                            value = idx * cardWidthPx,
+                            animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioLowBouncy)
+                        )
+                    } else if (firstLoad) {
+                        // Immediate scroll on first load
+                        mainListState.scrollToItem(idx)
+                        overlayWeeklyScrollState.scrollTo(idx * cardWidthPx)
+                    }
                 }
             }
         }
@@ -166,20 +186,28 @@ fun TimetableScreen(
                             fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                         )
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "$className • $currentTime",
-                            fontSize = if (isOverlayActive) 14.sp else 16.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable { isEditingName = true }.padding(vertical = 2.dp),
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
-                        )
+                        AnimatedContent(
+                            targetState = className to currentPeriodId,
+                            transitionSpec = {
+                                fadeIn(animationSpec = tween(600)) togetherWith fadeOut(animationSpec = tween(600))
+                            }
+                        ) { (name, _) ->
+                            Text(
+                                text = "$name • $currentTime",
+                                fontSize = if (isOverlayActive) 14.sp else 16.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { isEditingName = true }.pointerHoverIcon(PointerIcon.Hand).padding(vertical = 2.dp),
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
+                            )
+                        }
                     }
                     
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Surface(
                             modifier = Modifier
                                 .clickable { onToggleOverlay() }
+                                .pointerHoverIcon(PointerIcon.Hand)
                                 .clip(RoundedCornerShape(8.dp)),
                             color = if (isOverlayActive) AccentSecondary else AccentSecondary.copy(alpha = 0.1f),
                             shape = RoundedCornerShape(8.dp),
@@ -193,9 +221,43 @@ fun TimetableScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isOverlayActive) "Pinned" else "Overlay", 
+                                    text = if (isOverlayActive) "Turn Off" else "Overlay", 
                                     color = if (isOverlayActive) Color.White else AccentSecondary, 
                                     fontWeight = FontWeight.Bold,
+                                    fontSize = if (isOverlayActive) 10.sp else 12.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
+                                )
+                            }
+                        }
+
+                        val isAutoHideEnabled by viewModel.isAutoHideOverlayEnabled.collectAsState()
+                        Surface(
+                            modifier = Modifier
+                                .clickable { viewModel.toggleAutoHideOverlay() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clip(RoundedCornerShape(8.dp)),
+                            color = if (isAutoHideEnabled) MaterialTheme.colorScheme.secondaryContainer else AccentPrimary.copy(0.2f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, if (isAutoHideEnabled) MaterialTheme.colorScheme.secondary else AccentPrimary.copy(0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(
+                                    horizontal = if (isOverlayActive) 10.dp else 14.dp, 
+                                    vertical = if (isOverlayActive) 6.dp else 10.dp
+                                ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isAutoHideEnabled) Icons.AutoMirrored.Filled.List else Icons.Default.Star,
+                                    contentDescription = "Toggle Auto-Hide",
+                                    tint = if (isAutoHideEnabled) MaterialTheme.colorScheme.onSecondaryContainer else AccentPrimary,
+                                    modifier = Modifier.size(if (isOverlayActive) 12.dp else 14.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    if (isAutoHideEnabled) "Auto-Hide ON" else "Auto-Hide OFF", 
+                                    color = if (isAutoHideEnabled) MaterialTheme.colorScheme.onSecondaryContainer else AccentPrimary, 
+                                    fontWeight = FontWeight.ExtraBold, 
                                     fontSize = if (isOverlayActive) 10.sp else 12.sp,
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                                 )
@@ -251,6 +313,7 @@ fun TimetableScreen(
                             Surface(
                                 modifier = Modifier
                                     .clickable { showSettingsDialog = true }
+                                    .pointerHoverIcon(PointerIcon.Hand)
                                     .clip(RoundedCornerShape(8.dp)),
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(8.dp)
@@ -299,7 +362,20 @@ fun TimetableScreen(
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f), contentAlignment = Alignment.Center) {
-                        Text("No schedule configuration found.", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val sundayMessage = if (currentDay == Calendar.SUNDAY) {
+                                "Enjoy your Sunday! \uD83C\uDF1F\nNo classes scheduled."
+                            } else {
+                                "No schedule configuration found for today."
+                            }
+                            Text(
+                                sundayMessage, 
+                                fontSize = 20.sp, 
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 28.sp
+                            )
+                        }
                     }
                 }
 
@@ -381,20 +457,24 @@ fun TimetableScreen(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.7f))
-                        .clickable { 
-                            if (hasUnsavedChanges) showDiscardDialog = true
-                            else viewModel.setSlidePanel(false)
-                        }
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Scrim (Background Dimming)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .clickable { 
+                                if (hasUnsavedChanges) showDiscardDialog = true
+                                else viewModel.setSlidePanel(false)
+                            }
+                    )
+
                     var draggedSubject by remember { mutableStateOf<Subject?>(null) }
                     var dragPosition by remember { mutableStateOf(Offset.Zero) }
                     val cellLayouts = remember { mutableMapOf<String, Rect>() }
                     var sliderBounds by remember { mutableStateOf(Rect.Zero) }
 
+                    // Menu Surface
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -403,7 +483,8 @@ fun TimetableScreen(
                             .clickable { /* prevent touch passthrough */ },
                         shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp
+                        tonalElevation = 0.dp,
+                        shadowElevation = 8.dp
                     ) {
                         Column(
                             modifier = Modifier.fillMaxSize()
@@ -646,8 +727,7 @@ fun TimetableScreen(
                 }
             )
         }
-        
-        // Settings Drawer Overlay
+              // Settings Drawer Overlay
         AnimatedVisibility(
             visible = showSettingsDialog,
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(400)),
@@ -657,12 +737,16 @@ fun TimetableScreen(
             var showAbout by remember { mutableStateOf(false) }
             var showHandleStyleSelector by remember { mutableStateOf(false) }
             
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { showSettingsDialog = false; showAbout = false; showHandleStyleSelector = false }
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Scrim (Background Dimming) - Separate from content to prevent "dullness"
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable { showSettingsDialog = false; showAbout = false; showHandleStyleSelector = false }
+                )
+
+                // Settings Pane Content
                 Surface(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -670,7 +754,8 @@ fun TimetableScreen(
                         .align(Alignment.CenterEnd)
                         .clickable { /* absorb taps */ },
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 12.dp
+                    tonalElevation = 0.dp,
+                    shadowElevation = 16.dp 
                 ) {
                     Column(
                         modifier = Modifier
@@ -778,30 +863,28 @@ fun TimetableScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.weight(1f))
-                            Text("Smart Timetable v1.1", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            Text("Smart Timetable v1.2.1", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                         }
                     }
                 }
             }
-        }
-    }
-
-    if (showBellTimingDialog) {
-        val timings = viewModel.getGlobalBellTimings()
-        BellTimingEditorDialog(
-            timings = timings,
-            is24HourFormat = is24HourFormatSetting,
-            onDismiss = { showBellTimingDialog = false },
-            onSave = { updated ->
-                // Single atomic call updates _schedules, _workingSchedules, persists,
-                // and recalculates current period all in one pass.
-                viewModel.saveAllBellTimings(updated)
-                showBellTimingDialog = false
+            if (showBellTimingDialog) {
+                val timings = viewModel.getGlobalBellTimings()
+                BellTimingEditorDialog(
+                    timings = timings,
+                    is24HourFormat = is24HourFormatSetting,
+                    onDismiss = { showBellTimingDialog = false },
+                    onSave = { updated ->
+                        viewModel.saveAllBellTimings(updated)
+                        showBellTimingDialog = false
+                    }
+                )
             }
-        )
+        }
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ModernTimetableCard(
     subject: Subject,
@@ -826,6 +909,7 @@ fun ModernTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
+    var isHovered by remember { mutableStateOf(false) }
     val screenMultiplier = 1.1f
 
     val baseModifier = Modifier
@@ -833,6 +917,9 @@ fun ModernTimetableCard(
         .width((220 * screenMultiplier).dp)
         .height((220 * screenMultiplier).dp) // Reduced height for main app
         .clip(RoundedCornerShape(24.dp))
+        .onPointerEvent(PointerEventType.Enter) { isHovered = true }
+        .onPointerEvent(PointerEventType.Exit) { isHovered = false }
+        .pointerHoverIcon(PointerIcon.Hand)
         .clickable { onClick() }
         
     val styledModifier = if (isCurrent) {
@@ -841,12 +928,12 @@ fun ModernTimetableCard(
             .border(3.dp, AccentSecondary.copy(alpha = pulseAlpha), RoundedCornerShape(24.dp))
     } else if (isBreak) {
         baseModifier
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+            .background(if (isHovered) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isHovered) 0.6f else 0.3f), RoundedCornerShape(24.dp))
     } else {
         baseModifier
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
+            .background(if (isHovered) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isHovered) 1.0f else 0.8f), RoundedCornerShape(24.dp))
     }
 
     Box(
@@ -935,6 +1022,7 @@ fun ModernTimetableCard(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CompactTimetableCard(
     subject: Subject,
@@ -961,6 +1049,7 @@ fun CompactTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
+    var isHovered by remember { mutableStateOf(false) }
     val screenMultiplier = 1.1f
 
     val baseModifier = modifier
@@ -968,6 +1057,9 @@ fun CompactTimetableCard(
         .width((140 * screenMultiplier).dp)
         .height((125 * screenMultiplier).dp)
         .clip(RoundedCornerShape(16.dp))
+        .onPointerEvent(PointerEventType.Enter) { isHovered = true }
+        .onPointerEvent(PointerEventType.Exit) { isHovered = false }
+        .pointerHoverIcon(PointerIcon.Hand)
         .clickable { onClick() }
         .then(if (isDragged) Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)) else Modifier)
         
@@ -979,12 +1071,12 @@ fun CompactTimetableCard(
             .border(2.dp, AccentSecondary.copy(alpha = pulseAlpha), RoundedCornerShape(16.dp))
     } else if (isBreak) {
         baseModifier
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+            .background(if (isHovered) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isHovered) 0.6f else 0.3f), RoundedCornerShape(16.dp))
     } else {
         baseModifier
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+            .background(if (isHovered) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isHovered) 1.0f else 0.8f), RoundedCornerShape(16.dp))
     }
 
     Box(

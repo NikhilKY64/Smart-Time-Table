@@ -17,6 +17,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.school.timetable.ui.theme.AccentPrimary
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.graphics.Brush
 
 enum class HandleStyle(val displayName: String) {
     DEFAULT("Default"),
@@ -43,8 +46,10 @@ fun DragHandle(style: HandleStyle, onClick: () -> Unit, onLongClick: (() -> Unit
                 modifier = Modifier
                     .width(80.dp)
                     .height(28.dp)
-                    .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                    .background(AccentPrimary.copy(alpha = 0.8f))
+                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp), spotColor = AccentPrimary.copy(alpha = 0.5f))
+                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                    .background(Brush.linearGradient(listOf(AccentPrimary, AccentPrimary.copy(alpha = 0.8f))))
+                    .pointerHoverIcon(PointerIcon.Hand)
                     .then(handleModifier),
                 contentAlignment = Alignment.Center
             ) {
@@ -139,8 +144,10 @@ fun DragHandle(style: HandleStyle, onClick: () -> Unit, onLongClick: (() -> Unit
                 modifier = Modifier
                     .width(80.dp)
                     .height(28.dp)
-                    .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                    .background(AccentPrimary.copy(alpha = 0.8f))
+                    .shadow(elevation = 6.dp, shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                    .background(Brush.linearGradient(listOf(AccentPrimary, AccentPrimary.copy(alpha = 0.7f))))
+                    .pointerHoverIcon(PointerIcon.Hand)
                     .then(handleModifier),
                 contentAlignment = Alignment.Center
             ) {

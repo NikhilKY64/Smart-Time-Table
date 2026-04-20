@@ -45,3 +45,15 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
+
+# IntelliJ IDEA - Extra Run Configs & Output
+out/
+.run/
+*.iws
+
+# Build & Performance
+*.hprof
+*.pyc
+
+# Distribution specific (if not using standard build directory)
+app/dist/

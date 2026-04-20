@@ -10,9 +10,17 @@ kotlin {
     androidTarget()
     
     jvm("desktop")
+
+    targets.all {
+        compilations.all {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xexpect-actual-classes")
+            }
+        }
+    }
     
     sourceSets {
-        val commonMain by getting {
+        named("commonMain") {
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -25,7 +33,7 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             }
         }
-        val androidMain by getting {
+        named("androidMain") {
             dependencies {
                 implementation("androidx.core:core-ktx:1.12.0")
                 implementation("androidx.activity:activity-compose:1.8.1")
@@ -33,7 +41,7 @@ kotlin {
                 implementation("com.google.code.gson:gson:2.10.1")
             }
         }
-        val desktopMain by getting {
+        named("desktopMain") {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")

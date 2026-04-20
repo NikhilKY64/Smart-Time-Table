@@ -18,4 +18,6 @@ expect class TimetableRepository {
     fun saveHandleStyle(style: HandleStyle)
     fun getFavoriteHandleStyles(): Set<HandleStyle>
     fun saveFavoriteHandleStyles(favorites: Set<HandleStyle>)
+    fun isAutoHideOverlayEnabled(): Boolean
+    fun setAutoHideOverlayEnabled(enabled: Boolean)
 }

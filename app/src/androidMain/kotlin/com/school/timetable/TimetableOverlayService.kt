@@ -255,7 +255,7 @@ fun OverlayContent(
             val schedule = schedules.find { it.dayOfWeek == displayDay }
             if (schedule != null) {
                 val period = schedule.subjects.find { 
-                    logicTime24 >= it.startTime && logicTime24 <= it.endTime
+                    logicTime24 >= it.startTime && logicTime24 < it.endTime
                 }
                 currentPeriodId = period?.id
             } else {

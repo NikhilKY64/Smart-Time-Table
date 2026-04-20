@@ -4,6 +4,7 @@ import java.util.prefs.Preferences
 import com.school.timetable.ui.HandleStyle
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.Calendar
 
 actual class TimetableRepository {
@@ -12,33 +13,41 @@ actual class TimetableRepository {
         ignoreUnknownKeys = true 
         encodeDefaults = true
     }
+    
+    // File-based storage to avoid Preferences character limit (8KB)
+    private val storageDir = File(System.getProperty("user.home"), ".smart-timetable").apply { mkdirs() }
+    private val profilesFile = File(storageDir, "profiles.json")
 
     actual fun getAllProfiles(): List<TimetableProfile> {
-        val json = prefs.get("timetable_profiles", null)
-        if (json != null) {
-            return try {
-                jsonHandler.decodeFromString<List<TimetableProfile>>(json)
-            } catch (e: Exception) {
-                emptyList()
-            }
+        if (!profilesFile.exists()) {
+            val defaultProfile = TimetableProfile(
+                id = "default",
+                name = "Main Timetable",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                schedules = generateMockData(),
+                isActive = true
+            )
+            val list = listOf(defaultProfile)
+            saveAllProfiles(list)
+            return list
         }
         
-        val defaultProfile = TimetableProfile(
-            id = "default",
-            name = "Main Timetable",
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-            schedules = generateMockData(),
-            isActive = true
-        )
-        
-        saveAllProfiles(listOf(defaultProfile))
-        return listOf(defaultProfile)
+        return try {
+            val json = profilesFile.readText()
+            jsonHandler.decodeFromString<List<TimetableProfile>>(json)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     actual fun saveAllProfiles(profiles: List<TimetableProfile>) {
-        val json = jsonHandler.encodeToString(profiles)
-        prefs.put("timetable_profiles", json)
+        try {
+            val json = jsonHandler.encodeToString(profiles)
+            profilesFile.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
     
     actual fun getTimetable(): List<DaySchedule> {
@@ -78,4 +87,7 @@ actual class TimetableRepository {
     actual fun saveFavoriteHandleStyles(favorites: Set<HandleStyle>) {
         prefs.put("favorite_styles", favorites.map { it.name }.joinToString(","))
     }
+    
+    actual fun isAutoHideOverlayEnabled(): Boolean = prefs.getBoolean("auto_hide_overlay", true)
+    actual fun setAutoHideOverlayEnabled(enabled: Boolean) = prefs.putBoolean("auto_hide_overlay", enabled)
 }

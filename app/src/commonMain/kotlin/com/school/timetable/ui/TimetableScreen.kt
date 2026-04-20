@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -863,23 +864,25 @@ fun TimetableScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.weight(1f))
-                            Text("Smart Timetable v1.2.1", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            Text("Smart Timetable v1.2.11", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                         }
                     }
                 }
             }
-            if (showBellTimingDialog) {
-                val timings = viewModel.getGlobalBellTimings()
-                BellTimingEditorDialog(
-                    timings = timings,
-                    is24HourFormat = is24HourFormatSetting,
-                    onDismiss = { showBellTimingDialog = false },
-                    onSave = { updated ->
-                        viewModel.saveAllBellTimings(updated)
-                        showBellTimingDialog = false
-                    }
-                )
-            }
+        }
+        
+        // Settings Dialogs (Should be outside the drawer so they don't close when drawer closes)
+        if (showBellTimingDialog) {
+            val timings = viewModel.getGlobalBellTimings()
+            BellTimingEditorDialog(
+                timings = timings,
+                is24HourFormat = is24HourFormatSetting,
+                onDismiss = { showBellTimingDialog = false },
+                onSave = { updated ->
+                    viewModel.saveAllBellTimings(updated)
+                    showBellTimingDialog = false
+                }
+            )
         }
     }
 }
@@ -1223,65 +1226,152 @@ fun BellTimingEditorDialog(
     onDismiss: () -> Unit,
     onSave: (List<Subject>) -> Unit
 ) {
-     var editedTimings by remember(timings) { mutableStateOf(timings) }
-     var pickerContext by remember { mutableStateOf<Triple<Int, Boolean, String>?>(null) } // index, isStart, initialTime
+    var editedTimings by remember(timings) { mutableStateOf(timings) }
+    var activeSelection by remember { mutableStateOf<Pair<Int, Boolean>?>(null) } // index, isStart
 
-     if (pickerContext != null) {
-          WheelTimePickerDialog(
-               initialTime24h = pickerContext!!.third,
-               is24HourFormat = is24HourFormat,
-               onDismiss = { pickerContext = null },
-               onTimeSelected = { newTime ->
-                   val ctx = pickerContext!!
-                   editedTimings = editedTimings.toMutableList().apply {
-                       val updated = if (ctx.second) this[ctx.first].copy(startTime = newTime) else this[ctx.first].copy(endTime = newTime)
-                       this[ctx.first] = updated
-                   }
-                   pickerContext = null
-               }
-          )
-     }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.width(850.dp).wrapContentHeight(),
+        title = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Smart Bell Dashboard", fontWeight = FontWeight.Black, fontSize = 24.sp)
+                Spacer(Modifier.width(12.dp))
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                    Text("Auto-Chain Active", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        },
+        text = {
+            Row(modifier = Modifier.fillMaxWidth().height(480.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                // Left Side: The List
+                Column(modifier = Modifier.weight(1.1f)) {
+                    Text("Select a time to adjust on the clock", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        itemsIndexed(editedTimings) { index, timing ->
+                            val isRunning = activeSelection?.first == index
+                            val periodLabel = if (timing.periodIndex == -1) "Break" else if (timing.periodIndex == 0) "Zero" else "P-${timing.periodIndex}"
+                            
+                            Surface(
+                                color = if (isRunning) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Text(periodLabel, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.width(60.dp))
+                                    
+                                    // Start Time Selector
+                                    TimeChip(
+                                        time = timing.startTime,
+                                        isSelected = isRunning && activeSelection?.second == true,
+                                        onClick = { activeSelection = index to true },
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    
+                                    Text(" to ", modifier = Modifier.padding(horizontal = 8.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    
+                                    // End Time Selector
+                                    TimeChip(
+                                        time = timing.endTime,
+                                        isSelected = isRunning && activeSelection?.second == false,
+                                        onClick = { activeSelection = index to false },
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
-     AlertDialog(
-         onDismissRequest = onDismiss,
-         title = { Text("Global Bell Timings", fontWeight = FontWeight.Bold) },
-         text = {
-             Column(modifier = Modifier.fillMaxWidth()) {
-                 Text("Changes will synchronize across all days simultaneously.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                 Spacer(Modifier.height(16.dp))
-                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxHeight(0.6f)) {
-                     itemsIndexed(editedTimings) { index, timing ->
-                          val periodLabel = if (timing.periodIndex == -1) "Break" else if (timing.periodIndex == 0) "Zero" else "P-${timing.periodIndex}"
-                          Row(
-                               verticalAlignment = Alignment.CenterVertically,
-                               horizontalArrangement = Arrangement.SpaceBetween,
-                               modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                          ) {
-                               Text(periodLabel, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.3f))
-                               
-                               Button(
-                                   onClick = { pickerContext = Triple(index, true, timing.startTime) },
-                                   modifier = Modifier.weight(0.3f),
-                                   contentPadding = PaddingValues(0.dp)
-                               ) { Text(timing.startTime, fontSize = 12.sp) }
-                               
-                               Text(" - ", modifier = Modifier.padding(horizontal = 8.dp))
-                               
-                               Button(
-                                   onClick = { pickerContext = Triple(index, false, timing.endTime) },
-                                   modifier = Modifier.weight(0.3f),
-                                   contentPadding = PaddingValues(0.dp)
-                               ) { Text(timing.endTime, fontSize = 12.sp) }
-                          }
-                     }
-                 }
-             }
-         },
-         confirmButton = {
-             Button(onClick = { onSave(editedTimings) }) { Text("Save") }
-         },
-         dismissButton = {
-             TextButton(onClick = onDismiss) { Text("Cancel") }
-         }
-     )
+                // Right Side: The Interactive Clock
+                Surface(
+                    modifier = Modifier.weight(0.9f).fillMaxHeight(),
+                    color = Color.Black.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                ) {
+                    if (activeSelection != null) {
+                        val (idx, isStart) = activeSelection!!
+                        val currentTime = if (isStart) editedTimings[idx].startTime else editedTimings[idx].endTime
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                if (isStart) "Set Start Time" else "Set End Time",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 14.sp
+                            )
+                            
+                            TimePickerContent(
+                                selectionKey = activeSelection,
+                                initialTime = currentTime,
+                                is24Hour = is24HourFormat,
+                                onTimeCompleted = { newTime ->
+                                    val currentIdx = idx
+                                    val currentIsStart = isStart
+                                    
+                                    editedTimings = editedTimings.toMutableList().apply {
+                                        // 1. Update the current value
+                                        this[currentIdx] = if (currentIsStart) {
+                                            this[currentIdx].copy(startTime = newTime)
+                                        } else {
+                                            this[currentIdx].copy(endTime = newTime)
+                                        }
+                                        
+                                        // 2. APPLY CHAIN LOGIC: If we updated END time, update next period START time
+                                        if (!currentIsStart && currentIdx < size - 1) {
+                                            this[currentIdx + 1] = this[currentIdx + 1].copy(startTime = newTime)
+                                        }
+                                    }
+                                    
+                                    // 3. AUTO-ADVANCE: Move to the next logical step
+                                    activeSelection = if (currentIsStart) {
+                                        currentIdx to false // Move to end time of same period
+                                    } else if (currentIdx < editedTimings.size - 1) {
+                                        (currentIdx + 1) to false // Move to end time of NEXT period (since start was auto-synced)
+                                    } else null
+                                }
+                            )
+                        }
+                    } else {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text("Select a time to\nstart editing", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.White.copy(alpha = 0.3f))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(editedTimings) }, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(8.dp)) {
+                Text("Save Full Schedule", fontWeight = FontWeight.Black)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.padding(8.dp)) {
+                Text("Cancel")
+            }
+        }
+    )
 }
+
+@Composable
+fun TimeChip(time: String, isSelected: Boolean, onClick: () -> Unit, color: Color) {
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) color else color.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) color else color.copy(alpha = 0.3f)),
+        modifier = Modifier.width(100.dp).height(42.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(time, fontSize = 16.sp, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold, color = if (isSelected) Color.White else color)
+        }
+    }
+ }

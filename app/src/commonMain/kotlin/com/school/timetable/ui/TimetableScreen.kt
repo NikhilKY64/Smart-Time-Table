@@ -864,7 +864,7 @@ fun TimetableScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.weight(1f))
-                            Text("Smart Timetable v1.2.11", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            Text("Smart Timetable v1.2.2", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                         }
                     }
                 }

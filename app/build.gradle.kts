@@ -60,8 +60,8 @@ android {
         applicationId = "com.school.timetable"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.11"
+        versionCode = 5
+        versionName = "1.2.2"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -89,12 +89,14 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "Smart Time Table"
-            packageVersion = "1.2.11"
+            packageVersion = "1.2.2"
+            
             windows {
-                iconFile = project.file("../Icon.ico")
+                iconFile = project.file("../resources/Icon.ico")
                 shortcut = true
                 menu = true
                 menuGroup = "Smart Time Table"
+                upgradeUuid = "68c5b0f5-5688-466d-a773-67890abcdef1" // Unique ID for your app
             }
         }
         buildTypes.release.proguard {

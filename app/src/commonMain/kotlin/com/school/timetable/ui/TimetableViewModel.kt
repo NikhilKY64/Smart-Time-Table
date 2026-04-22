@@ -1,4 +1,4 @@
- package com.school.timetable.ui
+package com.school.timetable.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -75,6 +75,15 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     private val _isSmartHideVisible = MutableStateFlow(true)
     val isSmartHideVisible: StateFlow<Boolean> = _isSmartHideVisible.asStateFlow()
 
+    private val _isAutoCollapseEnabled = MutableStateFlow(true)
+    val isAutoCollapseEnabled: StateFlow<Boolean> = _isAutoCollapseEnabled.asStateFlow()
+
+    private val _autoCollapseDelay = MutableStateFlow(5)
+    val autoCollapseDelay: StateFlow<Int> = _autoCollapseDelay.asStateFlow()
+
+    private val _isStartOnStartupEnabled = MutableStateFlow(false)
+    val isStartOnStartupEnabled: StateFlow<Boolean> = _isStartOnStartupEnabled.asStateFlow()
+
     private var smartHideJob: kotlinx.coroutines.Job? = null
 
     init {
@@ -91,6 +100,9 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _handleStyle.value = repository.getHandleStyle()
         _favoriteStyles.value = repository.getFavoriteHandleStyles()
         _isAutoHideOverlayEnabled.value = repository.isAutoHideOverlayEnabled()
+        _isAutoCollapseEnabled.value = repository.isAutoCollapseEnabled()
+        _autoCollapseDelay.value = repository.getAutoCollapseDelay()
+        _isStartOnStartupEnabled.value = repository.isStartOnStartupEnabled()
     }
 
     private fun startClock() {
@@ -161,11 +173,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         }
     }
 
-    /**
-     * Re-reads the active timetable from the repository and pushes it to _schedules.
-     * Call this after ANY mutation that saves timetable data, so the main screen
-     * always reflects the real persisted state.
-     */
     private fun refreshSchedules() {
         _schedules.value = repository.getTimetable()
         _profiles.value = repository.getAllProfiles()
@@ -209,7 +216,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _slidePanelSchedules.value = _workingSchedules.value
         repository.saveTimetable(pId, _workingSchedules.value)
         _hasUnsavedChanges.value = false
-        // Re-read from repository so main screen always shows what was actually saved.
         refreshSchedules()
     }
 
@@ -219,33 +225,21 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     }
 
     fun getGlobalBellTimings(): List<Subject> {
-        // Read from the live active schedules, not the working copy.
-        // This ensures the Bell Timing dialog always shows the real saved timings.
         val firstDay = _schedules.value.firstOrNull() ?: return emptyList()
         return firstDay.subjects
     }
 
     fun updateGlobalBellTiming(periodIndex: Int, newStartTime: String, newEndTime: String) {
-        // Build a map of one period change and delegate to the batch function.
         val timingMap = mapOf(periodIndex to Pair(newStartTime, newEndTime))
         applyBellTimings(timingMap)
     }
 
-    /**
-     * Atomically applies all bell timing changes in a single pass.
-     * This avoids multiple intermediate StateFlow emissions and ensures the
-     * main screen updates once with ALL changes applied.
-     *
-     * @param timings map of periodIndex -> Pair(startTime, endTime)
-     */
     fun saveAllBellTimings(timings: List<Subject>) {
-        // Build lookup: periodIndex -> (startTime, endTime)
         val timingMap = timings.associate { it.periodIndex to Pair(it.startTime, it.endTime) }
         applyBellTimings(timingMap)
     }
 
     private fun applyBellTimings(timingMap: Map<Int, Pair<String, String>>) {
-        // Compute the updated schedules from the current live data.
         val updatedSchedules = _schedules.value.map { day ->
             day.copy(subjects = day.subjects.map { subject ->
                 val newTiming = timingMap[subject.periodIndex]
@@ -257,11 +251,9 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             })
         }
 
-        // Persist to the active profile first.
         val activeProfileId = repository.getActiveProfileId()
         repository.saveTimetable(activeProfileId, updatedSchedules)
 
-        // Also keep the working schedules in sync (for when the slide panel is open).
         if (_workingSchedules.value.isNotEmpty()) {
             val updatedWorking = _workingSchedules.value.map { day ->
                 day.copy(subjects = day.subjects.map { subject ->
@@ -276,16 +268,14 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             _workingSchedules.value = updatedWorking
         }
 
-        // Re-read from repository so main screen reflects exactly what was saved.
         refreshSchedules()
     }
 
     fun createNewProfile(name: String, copyFromActive: Boolean = false) {
         val currentProfiles = repository.getAllProfiles().toMutableList()
         val newSchedules = if (copyFromActive) {
-            repository.getTimetable() // copies active
+            repository.getTimetable()
         } else {
-            // generate empty structured data
             repository.getTimetable().map { day -> 
                 day.copy(subjects = day.subjects.map { it.copy(name = "", teacher = "") }) 
             }
@@ -320,7 +310,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             it.copy(isActive = it.id == profileId)
         }
         repository.saveAllProfiles(currentProfiles)
-        // Re-read from repository so main screen immediately shows new active profile.
         refreshSchedules()
     }
 
@@ -337,8 +326,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             _slidePanelSchedules.value = scheds
             _workingSchedules.value = scheds
             _hasUnsavedChanges.value = false
-        } else {
-            // we do not naturally reset without prompt, UI will handle prompts
         }
         _isSlidePanelOpen.value = open
     }
@@ -361,10 +348,9 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun setOverlayExpanded(expanded: Boolean) {
         _isOverlayExpanded.value = expanded
         if (expanded) {
-            _isSmartHideVisible.value = true // Wake up for notifications
+            _isSmartHideVisible.value = true
         }
         
-        // Reset Smart-Hide timer
         smartHideJob?.cancel()
         if (!expanded && _isAutoHideOverlayEnabled.value) {
             smartHideJob = viewModelScope.launch {
@@ -381,7 +367,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun setSmartHideVisible(visible: Boolean) {
         _isSmartHideVisible.value = visible
         if (visible) {
-            // If we wake it up manually, restart the timer if collapsed
             if (!_isOverlayExpanded.value && _isAutoHideOverlayEnabled.value) {
                 smartHideJob?.cancel()
                 smartHideJob = viewModelScope.launch {
@@ -397,12 +382,10 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _isAutoHideOverlayEnabled.value = newState
         repository.setAutoHideOverlayEnabled(newState)
         
-        // If turned off, make sure we are visible
         if (!newState) {
             _isSmartHideVisible.value = true
             smartHideJob?.cancel()
         } else if (!_isOverlayExpanded.value) {
-            // If turned on while collapsed, start hiding timer
             setOverlayExpanded(false)
         }
     }
@@ -412,7 +395,6 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _is24HourFormat.value = newFormat
         repository.set24HourFormat(newFormat)
         
-        // Refresh immediately using current clock
         val cal = Calendar.getInstance()
         val sdf24 = SimpleDateFormat("HH:mm", Locale.getDefault())
         val sdf12 = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -422,13 +404,27 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun toggleFavoriteStyle(style: HandleStyle) {
         val currentFavorites = _favoriteStyles.value.toMutableSet()
         if (currentFavorites.contains(style)) {
-            // Cannot remove the last favorite, maybe allow it? Yes, we allow empty or default.
             currentFavorites.remove(style)
         } else {
             currentFavorites.add(style)
         }
         _favoriteStyles.value = currentFavorites
         repository.saveFavoriteHandleStyles(currentFavorites)
+    }
+
+    fun setAutoCollapseEnabled(enabled: Boolean) {
+        _isAutoCollapseEnabled.value = enabled
+        repository.setAutoCollapseEnabled(enabled)
+    }
+
+    fun setAutoCollapseDelay(seconds: Int) {
+        _autoCollapseDelay.value = seconds
+        repository.setAutoCollapseDelay(seconds)
+    }
+
+    fun setStartOnStartupEnabled(enabled: Boolean) {
+        _isStartOnStartupEnabled.value = enabled
+        repository.setStartOnStartupEnabled(enabled)
     }
 }
 

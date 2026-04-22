@@ -20,4 +20,12 @@ expect class TimetableRepository {
     fun saveFavoriteHandleStyles(favorites: Set<HandleStyle>)
     fun isAutoHideOverlayEnabled(): Boolean
     fun setAutoHideOverlayEnabled(enabled: Boolean)
+
+    fun isAutoCollapseEnabled(): Boolean
+    fun setAutoCollapseEnabled(enabled: Boolean)
+    fun getAutoCollapseDelay(): Int
+    fun setAutoCollapseDelay(seconds: Int)
+
+    fun isStartOnStartupEnabled(): Boolean
+    fun setStartOnStartupEnabled(enabled: Boolean)
 }

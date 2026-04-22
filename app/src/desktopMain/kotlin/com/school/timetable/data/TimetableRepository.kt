@@ -90,4 +90,33 @@ actual class TimetableRepository {
     
     actual fun isAutoHideOverlayEnabled(): Boolean = prefs.getBoolean("auto_hide_overlay", true)
     actual fun setAutoHideOverlayEnabled(enabled: Boolean) = prefs.putBoolean("auto_hide_overlay", enabled)
+
+    actual fun isAutoCollapseEnabled(): Boolean = prefs.getBoolean("auto_collapse_enabled", true)
+    actual fun setAutoCollapseEnabled(enabled: Boolean) = prefs.putBoolean("auto_collapse_enabled", enabled)
+    actual fun getAutoCollapseDelay(): Int = prefs.getInt("auto_collapse_delay", 5)
+    actual fun setAutoCollapseDelay(seconds: Int) = prefs.putInt("auto_collapse_delay", seconds)
+
+    actual fun isStartOnStartupEnabled(): Boolean = prefs.getBoolean("start_on_startup", false)
+    actual fun setStartOnStartupEnabled(enabled: Boolean) {
+        prefs.putBoolean("start_on_startup", enabled)
+        updateStartupRegistry(enabled)
+    }
+
+    private fun updateStartupRegistry(enabled: Boolean) {
+        val appName = "SmartTimetable"
+        val cmd = if (enabled) {
+            val exePath = ProcessHandle.current().info().command().orElse("")
+            if (exePath.isEmpty()) return
+            // Wrap in quotes to handle spaces in path
+            "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"$appName\" /t REG_SZ /d \"\\\"$exePath\\\" --startup\" /f"
+        } else {
+            "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"$appName\" /f"
+        }
+        
+        try {
+            Runtime.getRuntime().exec(cmd)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

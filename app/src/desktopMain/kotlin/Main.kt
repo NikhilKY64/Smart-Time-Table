@@ -15,19 +15,34 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.text.font.FontWeight
 import com.school.timetable.App
 import com.school.timetable.data.TimetableRepository
 import com.school.timetable.ui.TimetableViewModel
-import kotlinx.coroutines.launch
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import java.awt.image.BufferedImage
+import java.awt.Font
+import java.awt.RenderingHints
+import java.awt.Color as AwtColor
+import java.util.Calendar
 
-fun main() {
+fun main(args: Array<String>) {
+    val isStartupLaunch = args.contains("--startup")
     val repository = TimetableRepository()
     val viewModel = TimetableViewModel(repository)
     
     application {
         var isOverlayActive by remember { mutableStateOf(false) }
-        var isWindowVisible by remember { mutableStateOf(true) }
+        var isWindowVisible by remember { mutableStateOf(!isStartupLaunch) }
+        var showTrayMenu by remember { mutableStateOf(false) }
     
     // Flow-driven States
     val isOverlayExpanded by viewModel.isOverlayExpanded.collectAsState()
@@ -52,27 +67,69 @@ fun main() {
         }
     }
 
-    val trayState = rememberTrayState()
+    val schedules by viewModel.schedules.collectAsState()
+    val currentDay by viewModel.currentDay.collectAsState()
+
     val icon = painterResource("Icon.png")
+    
+    // Dynamic Icon Logic
+    val trayIcon = remember(currentPeriodId, schedules, currentDay) {
+        val today = schedules.find { it.dayOfWeek == currentDay }
+        if (today == null || currentPeriodId == null) return@remember icon
+        
+        val index = today.subjects.indexOfFirst { it.id == currentPeriodId }
+        if (index == -1) return@remember icon
+        
+        val subject = today.subjects[index]
+        val isBreak = subject.name.uppercase().contains("BREAK")
+        
+        // Count non-break periods for P numbering
+        var pNumber = 0
+        for (i in 0..index) {
+            if (!today.subjects[i].name.uppercase().contains("BREAK")) {
+                pNumber++
+            }
+        }
+        
+        val text = if (isBreak) "B" else "P$pNumber"
+        val backgroundColor = if (isBreak) AwtColor(46, 204, 113) else AwtColor(52, 152, 219)
+        
+        try {
+            val bi = BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB)
+            val g2d = bi.createGraphics()
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            
+            // Draw Background Circle/Square
+            g2d.color = backgroundColor
+            g2d.fillRoundRect(0, 0, 32, 32, 8, 8)
+            
+            // Draw Text
+            g2d.color = AwtColor.WHITE
+            g2d.font = Font("SansSerif", Font.BOLD, if (text.length > 1) 16 else 20)
+            val fm = g2d.fontMetrics
+            val x = (32 - fm.stringWidth(text)) / 2
+            val y = ((32 - fm.height) / 2) + fm.ascent
+            g2d.drawString(text, x, y)
+            g2d.dispose()
+            
+            BitmapPainter(bi.toComposeImageBitmap())
+        } catch (e: Exception) {
+            icon
+        }
+    }
+
+    val trayState = rememberTrayState()
 
     Tray(
-        icon = icon,
+        icon = trayIcon,
         state = trayState,
         tooltip = "Smart Timetable",
+        onAction = { showTrayMenu = !showTrayMenu },
         menu = {
-            Item("Show App", onClick = { 
-                isWindowVisible = true 
-                isOverlayActive = false 
-            })
-            Item("Show Today's Timetable", onClick = {
-                isOverlayActive = true
-                viewModel.setOverlayExpanded(true)
-                scope.launch {
-                    delay(3000)
-                    viewModel.setOverlayExpanded(false)
-                }
-            })
-            Item("Exit", onClick = ::exitApplication)
+            Item("Open Smart Controls", onClick = { showTrayMenu = true })
+            Separator()
+            Item("Exit App", onClick = ::exitApplication)
         }
     )
 
@@ -97,23 +154,50 @@ fun main() {
             var handleOffsetX by remember { mutableStateOf(0f) }
             var showCustomization by remember { mutableStateOf(false) }
             var handleAlpha by remember { mutableStateOf(1f) }
-            
             val handleStyle by viewModel.handleStyle.collectAsState()
             val favoriteStyles by viewModel.favoriteStyles.collectAsState()
+            val isAutoHideEnabled by viewModel.isAutoHideOverlayEnabled.collectAsState()
+            var lastInteractionKey by remember { mutableStateOf(0L) }
             
-            // Small handle-fading timer logic
-            LaunchedEffect(isOverlayExpanded) {
+            // Interaction: Reset timer on any interaction within the overlay
+            val updateInteraction = { lastInteractionKey = System.currentTimeMillis() }
+
+            // Smart Handle Fading Logic
+            LaunchedEffect(isOverlayExpanded, lastInteractionKey, isAutoHideEnabled) {
                 if (!isOverlayExpanded) {
+                    // Wait for 5 seconds of idle time
                     delay(5000)
-                    handleAlpha = 0.2f
+                    if (isAutoHideEnabled) {
+                        handleAlpha = 0f // Completely remove from screen
+                    } else {
+                        handleAlpha = 0.3f // Semi-transparent
+                    }
                 } else {
-                    handleAlpha = 1f
+                    handleAlpha = 1f // Always visible when expanded
+                    updateInteraction()
                 }
             }
 
+            val isAutoCollapseEnabled by viewModel.isAutoCollapseEnabled.collectAsState()
+            val autoCollapseDelay by viewModel.autoCollapseDelay.collectAsState()
+
+            // Slider Auto-Collapse Logic
+            LaunchedEffect(isOverlayExpanded, lastInteractionKey, isAutoCollapseEnabled, autoCollapseDelay) {
+                if (isOverlayExpanded && isAutoCollapseEnabled) {
+                    delay(autoCollapseDelay * 1000L)
+                    viewModel.setOverlayExpanded(false)
+                }
+            }
+
+            val animatedAlpha by animateFloatAsState(handleAlpha)
+
             val windowState = rememberWindowState(
                 width = 1200.dp, 
-                height = if (isOverlayExpanded) 400.dp else 48.dp, 
+                height = when {
+                    isOverlayExpanded -> 400.dp
+                    animatedAlpha > 0f -> 48.dp
+                    else -> 0.dp
+                }, 
                 position = WindowPosition(Alignment.TopCenter)
             )
 
@@ -131,25 +215,54 @@ fun main() {
                 }
             }
             
-            LaunchedEffect(isOverlayExpanded) {
+            LaunchedEffect(isOverlayExpanded, animatedAlpha) {
                 windowState.size = windowState.size.copy(
-                    height = if (isOverlayExpanded) 400.dp else 48.dp
+                    height = when {
+                        isOverlayExpanded -> 400.dp
+                        animatedAlpha > 0f -> 48.dp
+                        else -> 0.dp
+                    }
                 )
             }
             
-            Window(
+            val overlayDialogState = rememberDialogState(
+                width = windowState.size.width,
+                height = windowState.size.height,
+                position = windowState.position
+            )
+
+            // Keep dialog state synced with window state
+            LaunchedEffect(windowState.size, windowState.position) {
+                overlayDialogState.size = windowState.size
+                overlayDialogState.position = windowState.position
+            }
+
+            @Suppress("DEPRECATION")
+            Dialog(
                 onCloseRequest = { isWindowVisible = false }, 
-                title = "Timetable Overlay",
-                icon = icon,
-                alwaysOnTop = true,
+                title = "", // Empty title helps hide from taskbar
                 undecorated = true,
                 transparent = true, 
-                state = windowState
+                state = overlayDialogState
             ) {
+                // Ensure Always on Top
+                SideEffect {
+                    window.isAlwaysOnTop = true
+                }
+                
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 40.dp), 
+                        .padding(horizontal = 40.dp)
+                        .pointerInput(Unit) {
+                            // Track ANY touch/mouse event to wake up the handle
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent()
+                                    updateInteraction()
+                                }
+                            }
+                        }, 
                     contentAlignment = Alignment.TopCenter
                 ) {
                     Column(
@@ -185,8 +298,6 @@ fun main() {
                                 )
                             }
                         }
-                        
-                        val animatedAlpha by animateFloatAsState(handleAlpha)
                         
                         Box(
                             modifier = Modifier
@@ -237,6 +348,118 @@ fun main() {
                 }
             }
         }
+        }
+        
+        // Custom Smart-Board Tray Menu
+        if (showTrayMenu) {
+            @Suppress("DEPRECATION")
+            Dialog(
+                onCloseRequest = { showTrayMenu = false },
+                state = rememberDialogState(
+                    width = 280.dp,
+                    height = 240.dp,
+                    position = WindowPosition(Alignment.BottomEnd)
+                ),
+                undecorated = true,
+                transparent = true,
+                resizable = false
+            ) {
+                // Adjust position and set always on top
+                SideEffect {
+                    window.isAlwaysOnTop = true
+                    // Manual tweak to push it up from the very corner
+                    val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
+                    window.setLocation(screen.width - 300, screen.height - 300)
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxSize().padding(12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Smart Controls",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        
+                        // Option: Main App
+                        Surface(
+                            onClick = { 
+                                isWindowVisible = true 
+                                isOverlayActive = false 
+                                showTrayMenu = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Home, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Full Dashboard", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Option: Slider Overlay
+                        Surface(
+                            onClick = { 
+                                isWindowVisible = true
+                                isOverlayActive = true
+                                viewModel.setOverlayExpanded(true)
+                                showTrayMenu = false
+                                scope.launch {
+                                    delay(4000)
+                                    viewModel.setOverlayExpanded(false)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.List, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Show Slider", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(Modifier.weight(1f))
+
+                        // Option: Exit
+                        Surface(
+                            onClick = ::exitApplication,
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Exit App", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

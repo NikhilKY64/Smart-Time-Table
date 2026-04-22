@@ -17,18 +17,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +32,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -67,14 +64,32 @@ fun TimetableScreen(
     val currentTime by viewModel.currentTimeFormat.collectAsState()
     val currentPeriodId by viewModel.currentPeriodId.collectAsState()
     val isSlidePanelOpen by viewModel.isSlidePanelOpen.collectAsState()
+    val hasUnsavedChanges by viewModel.hasUnsavedChanges.collectAsState()
 
     var subjectToEdit by remember { mutableStateOf<Subject?>(null) }
     var isEditingName by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showBellTimingDialog by remember { mutableStateOf(false) }
     val className by viewModel.className.collectAsState(initial = "XII-E")
+    
+    // Feature: Temporary Day Navigation
+    var dayOffset by remember { mutableStateOf(0) }
+    
+    // Reset offset when curtain toggles
+    LaunchedEffect(isSlidePanelOpen) {
+        dayOffset = 0
+    }
+    
+    val effectiveDay = remember(currentDay, dayOffset) {
+        val cal = Calendar.getInstance()
+        // We calculate day relative to currentDay
+        var target = currentDay + dayOffset
+        while (target <= 0) target += 7
+        while (target > 7) target -= 7
+        target
+    }
 
-    val dayName = when (currentDay) {
+    val dayName = when (effectiveDay) {
         Calendar.MONDAY -> "Monday"
         Calendar.TUESDAY -> "Tuesday"
         Calendar.WEDNESDAY -> "Wednesday"
@@ -90,7 +105,7 @@ fun TimetableScreen(
     val currentHandleStyle by viewModel.handleStyle.collectAsState()
     val favoriteStyles by viewModel.favoriteStyles.collectAsState()
     val profiles by viewModel.profiles.collectAsState()
-    val hasUnsavedChanges by viewModel.hasUnsavedChanges.collectAsState()
+    val isStartOnStartupEnabled by viewModel.isStartOnStartupEnabled.collectAsState()
 
     var showCreateProfileDialog by remember { mutableStateOf(false) }
 
@@ -112,7 +127,7 @@ fun TimetableScreen(
         }
     }
     
-    val todaySchedule = schedules.find { it.dayOfWeek == currentDay }
+    val todaySchedule = schedules.find { it.dayOfWeek == effectiveDay }
 
     val mainListState = rememberLazyListState()
     val overlayWeeklyScrollState = rememberScrollState()
@@ -180,12 +195,19 @@ fun TimetableScreen(
                 ) {
                     Column {
                         Text(
-                            text = dayName,
+                            text = if (dayOffset == 0) dayName else if (dayOffset == 1) "Tomorrow" else if (dayOffset == -1) "Yesterday" else dayName,
                             fontSize = if (isOverlayActive) 20.sp else 32.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            color = if (dayOffset == 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.primary,
                             fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
                         )
+                        if (dayOffset != 0) {
+                            Text(
+                                text = if (dayOffset > 0) "($dayName)" else "($dayName)",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Spacer(modifier = Modifier.height(2.dp))
                         AnimatedContent(
                             targetState = className to currentPeriodId,
@@ -193,14 +215,31 @@ fun TimetableScreen(
                                 fadeIn(animationSpec = tween(600)) togetherWith fadeOut(animationSpec = tween(600))
                             }
                         ) { (name, _) ->
-                            Text(
-                                text = "$name • $currentTime",
-                                fontSize = if (isOverlayActive) 14.sp else 16.sp,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { isEditingName = true }.pointerHoverIcon(PointerIcon.Hand).padding(vertical = 2.dp),
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { dayOffset-- }, modifier = Modifier.size(if (isOverlayActive) 18.dp else 24.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                
+                                Text(
+                                    text = "$name • $currentTime",
+                                    fontSize = if (isOverlayActive) 14.sp else 16.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .clickable { 
+                                            isEditingName = true 
+                                        }
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                        .padding(vertical = 2.dp),
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif
+                                )
+                                
+                                Spacer(Modifier.width(4.dp))
+                                IconButton(onClick = { dayOffset++ }, modifier = Modifier.size(if (isOverlayActive) 18.dp else 24.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
                         }
                     }
                     
@@ -479,17 +518,34 @@ fun TimetableScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillMaxHeight(0.9f)
+                            .fillMaxHeight(0.92f)
                             .onGloballyPositioned { sliderBounds = it.boundsInWindow() }
+                            .pointerInput(Unit) {
+                                // 2. Drag-to-Close gesture: Slide it UP to close
+                                detectDragGestures(
+                                    onDragEnd = {
+                                        // If they leave it as is or pull it UP, snap it closed
+                                        viewModel.setSlidePanel(false)
+                                    },
+                                    onDrag = { change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: androidx.compose.ui.geometry.Offset ->
+                                        // If they drag UP significantly, close it immediately
+                                        if (dragAmount.y < -30) {
+                                            viewModel.setSlidePanel(false)
+                                            change.consume()
+                                        }
+                                    }
+                                )
+                            }
                             .clickable { /* prevent touch passthrough */ },
                         shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 8.dp
+                        tonalElevation = 2.dp,
+                        shadowElevation = 12.dp
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
                             // Panel Header
                             Row(
                                 modifier = Modifier
@@ -498,12 +554,26 @@ fun TimetableScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "Weekly Overview",
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { dayOffset-- }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                                    }
+                                    
+                                    Spacer(Modifier.width(8.dp))
+                                    
+                                    Text(
+                                        text = if (dayOffset == 0) "Weekly Overview" else "Overview • $dayName",
+                                        fontSize = 28.sp, // Maintained large size
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (dayOffset == 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                                    )
+                                    
+                                    Spacer(Modifier.width(8.dp))
+                                    
+                                    IconButton(onClick = { dayOffset++ }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                                    }
+                                }
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (hasUnsavedChanges) {
                                         Button(
@@ -631,7 +701,14 @@ fun TimetableScreen(
                                         }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(40.dp))
+                                Spacer(modifier = Modifier.height(30.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 40.dp, height = 4.dp)
+                                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f), CircleShape)
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
                     }
@@ -739,7 +816,7 @@ fun TimetableScreen(
             var showHandleStyleSelector by remember { mutableStateOf(false) }
             
             Box(modifier = Modifier.fillMaxSize()) {
-                // Scrim (Background Dimming) - Separate from content to prevent "dullness"
+                // Scrim
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -807,7 +884,6 @@ fun TimetableScreen(
                                                 }
                                             }
                                             Spacer(modifier = Modifier.height(12.dp))
-                                            // Render visual preview
                                             Box(
                                                 modifier = Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha=0.05f)),
                                                 contentAlignment = Alignment.Center
@@ -821,57 +897,144 @@ fun TimetableScreen(
                             Spacer(Modifier.height(16.dp))
                             Button(onClick = { showHandleStyleSelector = false }, modifier = Modifier.fillMaxWidth()) { Text("Back to Settings", color = Color.White) }
                         } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Section 1: Personalization
+                                SettingSectionHeader("Visuals & Style")
+                                SettingItem(
+                                    title = "Handle Style",
+                                    subtitle = "Change overlay grabber look",
+                                    icon = Icons.Default.Settings,
+                                    iconColor = Color(0xFF6200EE),
+                                    onClick = { showHandleStyleSelector = true }
+                                )
+                                SettingItem(
+                                    title = "Switch Theme",
+                                    subtitle = if (isDarkTheme) "Dark Mode" else "Light Mode",
+                                    icon = Icons.Default.Settings,
+                                    iconColor = Color(0xFF03DAC6),
+                                    onClick = { viewModel.toggleTheme() }
+                                )
 
+                                // Section 2: Core Configuration
+                                SettingSectionHeader("Data & Schedule")
+                                SettingItem(
+                                    title = "Class Name",
+                                    subtitle = "Current: ${viewModel.className.value}",
+                                    icon = Icons.Default.Edit,
+                                    iconColor = Color(0xFFBB86FC), // Light Purple
+                                    onClick = { showSettingsDialog = false; isEditingName = true }
+                                )
+                                SettingItem(
+                                    title = "Bell Timings",
+                                    subtitle = "Adjust period durations",
+                                    icon = Icons.Default.Settings,
+                                    iconColor = Color(0xFFCF6679), // Coral
+                                    onClick = { showSettingsDialog = false; showBellTimingDialog = true }
+                                )
+
+                                // Section 3: System & Behavior
+                                SettingSectionHeader("System & Behavior")
+                                SettingItem(
+                                    title = "Launch on Startup",
+                                    subtitle = if (isStartOnStartupEnabled) "App starts with Windows" else "Starts only when opened",
+                                    icon = Icons.Default.Settings,
+                                    iconColor = Color(0xFFFDD835), // Gold
+                                    onClick = { viewModel.setStartOnStartupEnabled(!isStartOnStartupEnabled) }
+                                )
+                                SettingItem(
+                                    title = "Time Format",
+                                    subtitle = if (is24HourFormatSetting) "24-Hour (14:00)" else "12-Hour (02:00 PM)",
+                                    icon = Icons.Default.Settings,
+                                    iconColor = Color(0xFF42A5F5), // Blue
+                                    onClick = { viewModel.toggleTimeFormat() }
+                                )
+
+                                // Sub-Section: Slider Behavior
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { showHandleStyleSelector = true }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) { Text("Handle Style", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { showSettingsDialog = false; isEditingName = true }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) { Text("Change Class Name", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { showSettingsDialog = false; showBellTimingDialog = true }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) { Text("Edit Bell Timing", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { showAbout = true }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) { Text("About Application", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleTheme() }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                    modifier = Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                                 ) {
-                                    Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Switch Theme", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                                        Text(if (isDarkTheme) "Dark" else "Light", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text("Slider Behavior", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.height(12.dp))
+                                        
+                                        val isAutoCollapseEnabled by viewModel.isAutoCollapseEnabled.collectAsState()
+                                        val autoCollapseDelay by viewModel.autoCollapseDelay.collectAsState()
+                                        
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Auto-Collapse", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Switch(
+                                                checked = isAutoCollapseEnabled,
+                                                onCheckedChange = { viewModel.setAutoCollapseEnabled(it) },
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                                )
+                                            )
+                                        }
+                                        
+                                        if (isAutoCollapseEnabled) {
+                                            Spacer(Modifier.height(16.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("Delay:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(50.dp))
+                                                Slider(
+                                                    value = autoCollapseDelay.toFloat(),
+                                                    onValueChange = { viewModel.setAutoCollapseDelay(it.toInt()) },
+                                                    valueRange = 2f..10f,
+                                                    steps = 7,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text("${autoCollapseDelay}s", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(30.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            }
+                                        }
                                     }
                                 }
+
+                                // Section 4: Information
+                                SettingSectionHeader("Information")
+                                SettingItem(
+                                    title = "About Application",
+                                    subtitle = "App info & Developer credits",
+                                    icon = Icons.Default.Info,
+                                    iconColor = Color(0xFFB0BEC5), // Grey
+                                    onClick = { showAbout = true }
+                                )
                                 
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleTimeFormat() }.clip(RoundedCornerShape(8.dp)),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) {
-                                    Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Time Format", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                                        Text(if (is24HourFormatSetting) "24-Hour" else "12-Hour (AM/PM)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    }
-                                }
+                                Spacer(Modifier.height(24.dp))
                             }
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text("Smart Timetable v1.2.2", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(0.0001f)) // Always use a tiny positive weight to avoid division by zero crashes
+                        
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(40.dp)
+                                    .height(4.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "Smart Timetable Version 1.2.2", 
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), 
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
             }
         }
         
-        // Settings Dialogs (Should be outside the drawer so they don't close when drawer closes)
+        // Settings Dialogs
         if (showBellTimingDialog) {
             val timings = viewModel.getGlobalBellTimings()
             BellTimingEditorDialog(
@@ -883,6 +1046,7 @@ fun TimetableScreen(
                     showBellTimingDialog = false
                 }
             )
+        }
         }
     }
 }
@@ -1375,3 +1539,59 @@ fun TimeChip(time: String, isSelected: Boolean, onClick: () -> Unit, color: Colo
         }
     }
  }
+
+@Composable
+private fun SettingSectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Black,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+        letterSpacing = 1.5.sp,
+        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingItem(
+    title: String,
+    subtitle: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color = MaterialTheme.colorScheme.primary,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .clip(RoundedCornerShape(12.dp)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(iconColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, modifier = Modifier.size(20.dp), tint = iconColor)
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp)
+                    if (subtitle != null) {
+                        Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                    }
+                }
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
+        }
+    }
+}

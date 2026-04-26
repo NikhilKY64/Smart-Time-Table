@@ -22,8 +22,8 @@ When you are ready to release a new version, follow these steps:
 
 ### 1. Update Version Numbers (Optional)
 Open `app/build.gradle.kts` and update these two lines:
-*   `versionName = "1.2.1"`
-*   `packageVersion = "1.2.1"`
+*   `versionName = "1.2.21"`
+*   `packageVersion = "1.2.21"`
 
 ### 2. Run the Build Command
 Use the "Distribution" command to create the final installer:
@@ -62,6 +62,9 @@ Your timetables and profiles are **not** saved in the app folder. They are saved
 ## ✨ Features Checklist
 *   [x] **Spring Physics**: Smooth vertical expansion and horizontal scrolling.
 *   [x] **Taskbar Integration**: Minimizes to taskbar; restores and expands on click.
-*   [x] **Smart-Hide**: Automatically wakes up at SS:55.7 and expands at SS:58.7.
+*   [x] **Smart-Hide**: Automatically wakes up and expands near period start times.
+*   [x] **Auto-Slide Toggle**: Enable/Disable automatic expansion via Settings or Tray.
+*   [x] **Universal Teacher Manager**: Map teachers to subjects once; syncs across all profiles.
+*   [x] **Refined Tray Menu**: Quick access to smart controls and an easy-exit close button.
 *   [x] **Visual Polish**: 12dp rounded corners, soft shadows, and linear gradients.
-*   [x] **High Capacity**: File-based storage (bypasses the 8KB Windows Registry limit).
+*   [x] **Robust Storage**: Profiles and Subject-Teacher mappings saved locally in your Home folder.

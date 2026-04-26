@@ -119,4 +119,28 @@ actual class TimetableRepository {
             e.printStackTrace()
         }
     }
+
+    actual fun isAutoSlideEnabled(): Boolean = prefs.getBoolean("auto_slide_enabled", true)
+    actual fun setAutoSlideEnabled(enabled: Boolean) = prefs.putBoolean("auto_slide_enabled", enabled)
+
+    private val teachersFile = File(storageDir, "teachers.json")
+
+    actual fun getSubjectTeachers(): Map<String, String> {
+        if (!teachersFile.exists()) return emptyMap()
+        return try {
+            val json = teachersFile.readText()
+            jsonHandler.decodeFromString<Map<String, String>>(json)
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    actual fun saveSubjectTeachers(teachers: Map<String, String>) {
+        try {
+            val json = jsonHandler.encodeToString(teachers)
+            teachersFile.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

@@ -40,8 +40,8 @@ fun main(args: Array<String>) {
     val viewModel = TimetableViewModel(repository)
     
     application {
-        var isOverlayActive by remember { mutableStateOf(false) }
-        var isWindowVisible by remember { mutableStateOf(!isStartupLaunch) }
+        var isOverlayActive by remember { mutableStateOf(true) }
+        var isWindowVisible by remember { mutableStateOf(true) }
         var showTrayMenu by remember { mutableStateOf(false) }
     
     // Flow-driven States
@@ -53,13 +53,16 @@ fun main(args: Array<String>) {
     val scope = rememberCoroutineScope()
 
     // Background Observer for Period Changes (Persistence Logic)
+    val isAutoSlideEnabled by viewModel.isAutoSlideEnabled.collectAsState()
+    
     LaunchedEffect(currentPeriodId) {
         if (currentPeriodId != null && currentPeriodId != lastPeriodId) {
             // Wake up and show expanded for 2 seconds on actual start
-            if (isOverlayActive) {
+            // ONLY if auto-slide is enabled
+            if (isOverlayActive && isAutoSlideEnabled) {
                 viewModel.setOverlayExpanded(true)
                 scope.launch {
-                    delay(2000) 
+                    delay(3500) 
                     viewModel.setOverlayExpanded(false)
                 }
             }
@@ -92,7 +95,7 @@ fun main(args: Array<String>) {
         }
         
         val text = if (isBreak) "B" else "P$pNumber"
-        val backgroundColor = if (isBreak) AwtColor(46, 204, 113) else AwtColor(52, 152, 219)
+        val backgroundColor = AwtColor(25, 118, 210) // Deep Material Blue for all
         
         try {
             val bi = BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB)
@@ -100,13 +103,13 @@ fun main(args: Array<String>) {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
             
-            // Draw Background Circle/Square
+            // Draw Background (Less rounding = more space for text)
             g2d.color = backgroundColor
-            g2d.fillRoundRect(0, 0, 32, 32, 8, 8)
+            g2d.fillRoundRect(0, 0, 32, 32, 4, 4)
             
-            // Draw Text
+            // Draw Text (Maximized size)
             g2d.color = AwtColor.WHITE
-            g2d.font = Font("SansSerif", Font.BOLD, if (text.length > 1) 16 else 20)
+            g2d.font = Font("SansSerif", Font.BOLD, if (text.length > 1) 22 else 28)
             val fm = g2d.fontMetrics
             val x = (32 - fm.stringWidth(text)) / 2
             val y = ((32 - fm.height) / 2) + fm.ascent
@@ -163,8 +166,11 @@ fun main(args: Array<String>) {
             val updateInteraction = { lastInteractionKey = System.currentTimeMillis() }
 
             // Smart Handle Fading Logic
-            LaunchedEffect(isOverlayExpanded, lastInteractionKey, isAutoHideEnabled) {
-                if (!isOverlayExpanded) {
+            LaunchedEffect(isOverlayExpanded, lastInteractionKey, isAutoHideEnabled, isSmartHideVisible) {
+                if (isOverlayExpanded || isSmartHideVisible) {
+                    handleAlpha = 1f
+                    updateInteraction()
+                } else {
                     // Wait for 5 seconds of idle time
                     delay(5000)
                     if (isAutoHideEnabled) {
@@ -172,9 +178,6 @@ fun main(args: Array<String>) {
                     } else {
                         handleAlpha = 0.3f // Semi-transparent
                     }
-                } else {
-                    handleAlpha = 1f // Always visible when expanded
-                    updateInteraction()
                 }
             }
 
@@ -206,12 +209,17 @@ fun main(args: Array<String>) {
                 windowState.isMinimized = !isSmartHideVisible
             }
             
-            // Interaction: Clicking Taskbar icon to restore should expand the slider
+            // Interaction: Clicking Taskbar icon to restore should expand the slider (if auto-slide is ON)
             LaunchedEffect(windowState.isMinimized) {
                 if (!windowState.isMinimized && !isSmartHideVisible) {
                     // This happens when user clicks Taskbar icon to 'Restore'
-                    viewModel.setSmartHideVisible(true)
-                    viewModel.setOverlayExpanded(true)
+                    if (isAutoSlideEnabled) {
+                        viewModel.setSmartHideVisible(true)
+                        viewModel.setOverlayExpanded(true)
+                    } else {
+                        // Just show the handle, don't expand
+                        viewModel.setSmartHideVisible(true)
+                    }
                 }
             }
             
@@ -279,9 +287,9 @@ fun main(args: Array<String>) {
                             ),
                             exit = slideOutVertically(
                                 targetOffsetY = { -it },
-                                animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioLowBouncy)
+                                animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy)
                             ) + shrinkVertically(
-                                animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioLowBouncy)
+                                animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy)
                             )
                         ) {
                             Box(
@@ -357,7 +365,7 @@ fun main(args: Array<String>) {
                 onCloseRequest = { showTrayMenu = false },
                 state = rememberDialogState(
                     width = 280.dp,
-                    height = 240.dp,
+                    height = 300.dp,
                     position = WindowPosition(Alignment.BottomEnd)
                 ),
                 undecorated = true,
@@ -380,16 +388,30 @@ fun main(args: Array<String>) {
                     shadowElevation = 12.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                 ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            "Smart Controls",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Close Button in Top Right
+                        IconButton(
+                            onClick = { showTrayMenu = false },
+                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close, 
+                                contentDescription = "Close Menu",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Smart Controls",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
                         
                         // Option: Main App
                         Surface(
@@ -438,6 +460,41 @@ fun main(args: Array<String>) {
                             }
                         }
 
+                        // Option: Auto-Slide Toggle
+                        val isAutoSlideEnabled by viewModel.isAutoSlideEnabled.collectAsState()
+                        Surface(
+                            onClick = { viewModel.setAutoSlideEnabled(!isAutoSlideEnabled) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isAutoSlideEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings, // Use a small cog or similar
+                                        contentDescription = null,
+                                        tint = if (isAutoSlideEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("Auto-Slide", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                }
+                                Switch(
+                                    checked = isAutoSlideEnabled,
+                                    onCheckedChange = { viewModel.setAutoSlideEnabled(it) },
+                                    modifier = Modifier.scale(0.7f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                )
+                            }
+                        }
+
                         Spacer(Modifier.weight(1f))
 
                         // Option: Exit
@@ -462,4 +519,5 @@ fun main(args: Array<String>) {
             }
         }
     }
+}
 }

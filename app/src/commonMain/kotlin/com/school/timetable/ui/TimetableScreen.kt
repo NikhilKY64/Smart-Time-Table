@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -108,6 +109,7 @@ fun TimetableScreen(
     val isStartOnStartupEnabled by viewModel.isStartOnStartupEnabled.collectAsState()
 
     var showCreateProfileDialog by remember { mutableStateOf(false) }
+    var showTeacherManager by remember { mutableStateOf(false) }
 
     val formatTime = { time24: String ->
         if (is24HourFormatSetting) time24
@@ -423,24 +425,82 @@ fun TimetableScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(0.45f).padding(24.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Timetable Profiles",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Surface(
-                                modifier = Modifier
-                                    .clickable { showCreateProfileDialog = true }
-                                    .clip(RoundedCornerShape(8.dp)),
-                                color = MaterialTheme.colorScheme.primary,
-                            ) {
-                                Text("Create New", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, fontWeight = FontWeight.Bold)
+                        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                            val isNarrow = maxWidth < 550.dp
+                            
+                            if (isNarrow) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        "Timetable Profiles",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .clickable { showCreateProfileDialog = true }
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                        ) {
+                                            Text("Create New", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        Surface(
+                                            modifier = Modifier
+                                                .clickable { showTeacherManager = true }
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.Person, null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Manage Teachers", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Timetable Profiles",
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .clickable { showCreateProfileDialog = true }
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            color = MaterialTheme.colorScheme.primary,
+                                        ) {
+                                            Text("Create New", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                        Spacer(Modifier.height(8.dp))
+                                        Surface(
+                                            modifier = Modifier
+                                                .clickable { showTeacherManager = true }
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Manage Teachers", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         Spacer(Modifier.height(16.dp))
@@ -465,12 +525,18 @@ fun TimetableScreen(
                 visible = isSlidePanelOpen,
                 enter = slideInVertically(
                     initialOffsetY = { -it }, 
-                    animationSpec = tween(300, easing = FastOutSlowInEasing)
-                ) + fadeIn(tween(300)),
+                    animationSpec = spring(
+                        stiffness = Spring.StiffnessLow,
+                        dampingRatio = Spring.DampingRatioLowBouncy
+                    )
+                ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
                 exit = slideOutVertically(
                     targetOffsetY = { -it },
-                    animationSpec = tween(250, easing = FastOutLinearInEasing)
-                ) + fadeOut(tween(250)),
+                    animationSpec = spring(
+                        stiffness = Spring.StiffnessLow,
+                        dampingRatio = Spring.DampingRatioNoBouncy
+                    )
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)),
                 modifier = Modifier.fillMaxSize()
             ) {
                 var showDiscardDialog by remember { mutableStateOf(false) }
@@ -738,8 +804,10 @@ fun TimetableScreen(
         
         // Edit Dialog
         subjectToEdit?.let { sub ->
+            val teachers by viewModel.subjectTeachers.collectAsState()
             EditCellDialog(
                 subject = sub,
+                subjectTeachers = teachers,
                 onDismiss = { subjectToEdit = null },
                 onSave = { name, teacher ->
                     // Times come from the subject unchanged — only name/teacher are editable here.
@@ -802,6 +870,134 @@ fun TimetableScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showCreateProfileDialog = false }) { Text("Cancel") }
+                }
+            )
+        }
+
+        if (showTeacherManager) {
+            val teachers by viewModel.subjectTeachers.collectAsState()
+            var newSubjectName by remember { mutableStateOf("") }
+            var newTeacherName by remember { mutableStateOf("") }
+            
+            AlertDialog(
+                onDismissRequest = { showTeacherManager = false },
+                modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(0.95f),
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Manage Teachers", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
+                    ) {
+                        // Section: Add New
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Add New Mapping", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = newSubjectName,
+                                        onValueChange = { newSubjectName = it },
+                                        placeholder = { Text("Subject", fontSize = 12.sp) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = newTeacherName,
+                                        onValueChange = { newTeacherName = it },
+                                        placeholder = { Text("Teacher", fontSize = 12.sp) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            if (newSubjectName.isNotBlank()) {
+                                                viewModel.addSubjectTeacher(newSubjectName, newTeacherName)
+                                                newSubjectName = ""
+                                                newTeacherName = ""
+                                            }
+                                        },
+                                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White)
+                                    ) {
+                                        Icon(Icons.Default.Add, null)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            "Existing Mappings (Updates all profiles instantly)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        if (teachers.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("No subjects found yet.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                items(teachers.keys.sorted()) { subject ->
+                                    var currentTeacher by remember(subject, teachers[subject]) { mutableStateOf(teachers[subject] ?: "") }
+                                    
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(subject, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                Text("Subject", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                            }
+                                            
+                                            OutlinedTextField(
+                                                value = currentTeacher,
+                                                onValueChange = { 
+                                                    currentTeacher = it
+                                                    viewModel.updateTeacherForSubject(subject, it)
+                                                },
+                                                placeholder = { Text("Teacher Name", fontSize = 12.sp) },
+                                                modifier = Modifier.width(180.dp),
+                                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                                                singleLine = true,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            
+                                            Spacer(Modifier.width(8.dp))
+                                            
+                                            IconButton(onClick = { viewModel.deleteSubjectTeacher(subject) }) {
+                                                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showTeacherManager = false }) {
+                        Text("Close")
+                    }
                 }
             )
         }
@@ -961,9 +1157,23 @@ fun TimetableScreen(
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Text("Slider Behavior", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.height(12.dp))
-                                        
+                                        val isAutoSlideEnabled by viewModel.isAutoSlideEnabled.collectAsState()
                                         val isAutoCollapseEnabled by viewModel.isAutoCollapseEnabled.collectAsState()
                                         val autoCollapseDelay by viewModel.autoCollapseDelay.collectAsState()
+
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Auto-Slide on Period", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Switch(
+                                                checked = isAutoSlideEnabled,
+                                                onCheckedChange = { viewModel.setAutoSlideEnabled(it) },
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                                )
+                                            )
+                                        }
+                                        
+                                        Spacer(Modifier.height(16.dp))
                                         
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                             Text("Auto-Collapse", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1023,7 +1233,7 @@ fun TimetableScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "Smart Timetable Version 1.2.2", 
+                                text = "Smart Timetable Version 1.2.21", 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), 
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium

@@ -72,7 +72,7 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     private val _isOverlayExpanded = MutableStateFlow(false)
     val isOverlayExpanded: StateFlow<Boolean> = _isOverlayExpanded.asStateFlow()
 
-    private val _isSmartHideVisible = MutableStateFlow(true)
+    private val _isSmartHideVisible = MutableStateFlow(false)
     val isSmartHideVisible: StateFlow<Boolean> = _isSmartHideVisible.asStateFlow()
 
     private val _isAutoCollapseEnabled = MutableStateFlow(true)
@@ -83,6 +83,12 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
 
     private val _isStartOnStartupEnabled = MutableStateFlow(false)
     val isStartOnStartupEnabled: StateFlow<Boolean> = _isStartOnStartupEnabled.asStateFlow()
+
+    private val _isAutoSlideEnabled = MutableStateFlow(true)
+    val isAutoSlideEnabled: StateFlow<Boolean> = _isAutoSlideEnabled.asStateFlow()
+
+    private val _subjectTeachers = MutableStateFlow<Map<String, String>>(emptyMap())
+    val subjectTeachers: StateFlow<Map<String, String>> = _subjectTeachers.asStateFlow()
 
     private var smartHideJob: kotlinx.coroutines.Job? = null
 
@@ -103,8 +109,11 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _isAutoCollapseEnabled.value = repository.isAutoCollapseEnabled()
         _autoCollapseDelay.value = repository.getAutoCollapseDelay()
         _isStartOnStartupEnabled.value = repository.isStartOnStartupEnabled()
+        _isAutoSlideEnabled.value = repository.isAutoSlideEnabled()
+        
+        _subjectTeachers.value = repository.getSubjectTeachers()
+        autoScanSubjects()
     }
-
     private fun startClock() {
         viewModelScope.launch {
             while (true) {
@@ -125,25 +134,28 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
                     val nextTime = sdf24Logic.format(calPlus43.time)
                     val schedule = _schedules.value.find { it.dayOfWeek == day }
                     val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
-                    if (startingSoon) {
+                    // ONLY wake up handle early if auto-slide is enabled
+                    if (startingSoon && _isAutoSlideEnabled.value) {
                         setSmartHideVisible(true) // Silently create window
                     }
                 }
 
-                // Pre-emptive 1.3-second detection for the actual drop-down
-                val calPlus13 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 1300) }
-                if (calPlus13.get(Calendar.SECOND) == 0 && calPlus13.get(Calendar.MILLISECOND) < 150) {
-                    val nextTime = sdf24Logic.format(calPlus13.time)
+                // Pre-emptive 1.4-second detection for the actual drop-down
+                val calPlus14 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 1400) }
+                if (calPlus14.get(Calendar.SECOND) == 0 && calPlus14.get(Calendar.MILLISECOND) < 150) {
+                    val nextTime = sdf24Logic.format(calPlus14.time)
                     val schedule = _schedules.value.find { it.dayOfWeek == day }
                     val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
                     if (startingSoon && !_isNextPeriodApproaching.value) {
                         _isNextPeriodApproaching.value = true
                         
                         // Drop down!
-                        setOverlayExpanded(true)
+                        if (_isAutoSlideEnabled.value) {
+                            setOverlayExpanded(true)
+                        }
 
                         launch {
-                            delay(3300) // Spans 1.3s before and 2.0s after start (Total 3.3s)
+                            delay(4900) // Spans 1.4s before and 3.5s after start (Total 4.9s)
                             _isNextPeriodApproaching.value = false
                         }
                     }
@@ -425,6 +437,90 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     fun setStartOnStartupEnabled(enabled: Boolean) {
         _isStartOnStartupEnabled.value = enabled
         repository.setStartOnStartupEnabled(enabled)
+    }
+
+    fun setAutoSlideEnabled(enabled: Boolean) {
+        _isAutoSlideEnabled.value = enabled
+        repository.setAutoSlideEnabled(enabled)
+    }
+
+    private fun autoScanSubjects() {
+        val allSubjects = _profiles.value.flatMap { profile ->
+            profile.schedules.flatMap { day ->
+                day.subjects
+            }
+        }.filter { it.periodIndex != -1 }
+        
+        val currentTeachers = _subjectTeachers.value.toMutableMap()
+        var changed = false
+        
+        allSubjects.forEach { subject ->
+            if (subject.name.isNotBlank() && !currentTeachers.containsKey(subject.name)) {
+                currentTeachers[subject.name] = subject.teacher
+                changed = true
+            }
+        }
+        
+        if (changed) {
+            _subjectTeachers.value = currentTeachers
+            repository.saveSubjectTeachers(currentTeachers)
+        }
+    }
+
+    fun updateTeacherForSubject(subjectName: String, teacherName: String) {
+        val currentTeachers = _subjectTeachers.value.toMutableMap()
+        currentTeachers[subjectName] = teacherName
+        _subjectTeachers.value = currentTeachers
+        repository.saveSubjectTeachers(currentTeachers)
+        
+        syncTeachersAcrossProfiles(subjectName, teacherName)
+    }
+
+    fun deleteSubjectTeacher(subjectName: String) {
+        val currentTeachers = _subjectTeachers.value.toMutableMap()
+        currentTeachers.remove(subjectName)
+        _subjectTeachers.value = currentTeachers
+        repository.saveSubjectTeachers(currentTeachers)
+        
+        // Reset these subjects to empty teacher in all profiles
+        syncTeachersAcrossProfiles(subjectName, "")
+    }
+
+    fun addSubjectTeacher(subjectName: String, teacherName: String) {
+        if (subjectName.isBlank()) return
+        val currentTeachers = _subjectTeachers.value.toMutableMap()
+        currentTeachers[subjectName] = teacherName
+        _subjectTeachers.value = currentTeachers
+        repository.saveSubjectTeachers(currentTeachers)
+        
+        syncTeachersAcrossProfiles(subjectName, teacherName)
+    }
+
+    private fun syncTeachersAcrossProfiles(subjectName: String, teacherName: String) {
+        val updatedProfiles = _profiles.value.map { profile ->
+            val updatedSchedules = profile.schedules.map { day ->
+                val updatedSubjects = day.subjects.map { subject ->
+                    if (subject.name == subjectName) {
+                        subject.copy(teacher = teacherName)
+                    } else {
+                        subject
+                    }
+                }
+                day.copy(subjects = updatedSubjects)
+            }
+            profile.copy(schedules = updatedSchedules)
+        }
+        
+        _profiles.value = updatedProfiles
+        repository.saveAllProfiles(updatedProfiles)
+        
+        val activeId = repository.getActiveProfileId()
+        _schedules.value = updatedProfiles.find { it.id == activeId }?.schedules ?: emptyList()
+        
+        if (_viewingProfileId.value != null) {
+            _slidePanelSchedules.value = updatedProfiles.find { it.id == _viewingProfileId.value }?.schedules ?: emptyList()
+            _workingSchedules.value = _slidePanelSchedules.value
+        }
     }
 }
 

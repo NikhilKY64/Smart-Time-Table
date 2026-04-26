@@ -28,4 +28,10 @@ expect class TimetableRepository {
 
     fun isStartOnStartupEnabled(): Boolean
     fun setStartOnStartupEnabled(enabled: Boolean)
+
+    fun isAutoSlideEnabled(): Boolean
+    fun setAutoSlideEnabled(enabled: Boolean)
+
+    fun getSubjectTeachers(): Map<String, String>
+    fun saveSubjectTeachers(teachers: Map<String, String>)
 }

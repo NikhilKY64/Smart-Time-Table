@@ -326,7 +326,7 @@ fun TimetableScreen(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        "Maximize View", 
+                                        "Open App", 
                                         color = Color.White, 
                                         fontWeight = FontWeight.ExtraBold, 
                                         fontSize = 10.sp,
@@ -1233,7 +1233,7 @@ fun TimetableScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "Smart Timetable Version 1.2.21", 
+                                text = "Smart Timetable Version 1.2.22", 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), 
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium

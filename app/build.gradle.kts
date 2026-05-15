@@ -60,8 +60,8 @@ android {
         applicationId = "com.school.timetable"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.2.21"
+        versionCode = 7
+        versionName = "1.2.22"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -89,9 +89,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "Smart Time Table"
-            packageVersion = "1.2.21"
+            packageVersion = "1.2.22"
             vendor = "Nikhil Kumar Yadav XII-E (2026-27)"
-            description = "A smart school timetable management application."
+            description = "A smart school timetable application."
             copyright = "© 2026 Nikhil Kumar Yadav. All rights reserved."
             
             windows {

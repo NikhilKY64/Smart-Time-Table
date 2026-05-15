@@ -4,12 +4,13 @@ A high-performance, premium timetable application for Windows. Featuring a **phy
 
 ---
 
-## ✨ What's New in v1.2.21 🆕
+## ✨ What's New in v1.2.22 🆕
 
-*   **⚡ Auto-Slide on Period**: The timetable now intelligently drops down automatically as your next period approaches.
-*   **👨‍🏫 Universal Teacher Manager**: Sync teacher names across all profiles instantly. Change it once, update it everywhere!
-*   **🖱️ Smart Controls (Tray Menu)**: A refined tray menu with quick toggles and an easy-exit button.
-*   **🎯 Precision Timing**: Tuned physics and timing (1.4s pre-emptive detection) for the smoothest experience yet.
+*   **🚀 Single-Instance Wakeup**: Clicking the desktop icon now intelligently triggers the existing app's slider instead of creating duplicates.
+*   **🖱️ Desktop Flyout Menu**: A native-feeling single-click flyout from the system tray for lightning-fast control.
+*   **🛡️ Boot Intelligence**: Correctly handles Windows startup launches to stay hidden and keep your desktop clean.
+*   **🎯 Interaction Polish**: Slider handle physics now respect your touch/drag gestures and won't auto-collapse while in use.
+*   **🔗 "Open App" Shortcut**: Replaced "Maximize view" with a clearer "Open App" button in the slider panel for better navigation.
 
 ---
 
@@ -30,7 +31,7 @@ To run the app directly from the source:
 ## 📦 Distribution & Releases
 
 ### 🏗️ How to create a New Version (.EXE)
-1.  **🔢 Update Version**: Open `app/build.gradle.kts` and update `versionName` & `packageVersion` to `1.2.21`.
+1.  **🔢 Update Version**: Open `app/build.gradle.kts` and update `versionName` & `packageVersion` to `1.2.22`.
 2.  **🔨 Build Installer**:
     ```powershell
     .\gradlew.bat :app:packageReleaseDistributionForCurrentOS

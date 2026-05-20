@@ -1,0 +1,117 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+kotlin {
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    
+    jvm("desktop") {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+
+    targets.all {
+        compilations.all {
+            compileTaskProvider.configure {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
+            }
+        }
+    }
+    
+    sourceSets {
+        named("commonMain") {
+            dependencies {
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(compose.ui)
+                implementation(compose.components.resources)
+                implementation(compose.components.uiToolingPreview)
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+            }
+        }
+        named("androidMain") {
+            dependencies {
+                implementation("androidx.core:core-ktx:1.12.0")
+                implementation("androidx.activity:activity-compose:1.8.1")
+                implementation("androidx.lifecycle:lifecycle-service:2.6.2")
+                implementation("com.google.code.gson:gson:2.10.1")
+            }
+        }
+        named("desktopMain") {
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")
+            }
+        }
+    }
+}
+
+android {
+    namespace = "com.school.timetable"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.school.timetable"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 8
+        versionName = "1.3.0"
+
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+compose.desktop {
+    application {
+        mainClass = "MainKt"
+        nativeDistributions {
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
+            packageName = "Smart Time Table"
+            packageVersion = "1.3.0"
+            vendor = "Nikhil Kumar Yadav XII-E (2026-27)"
+            description = "A smart school timetable application."
+            copyright = "© 2026 Nikhil Kumar Yadav. All rights reserved."
+            
+            windows {
+                iconFile = project.file("../resources/Icon.ico")
+                shortcut = true
+                menu = true
+                menuGroup = "Smart Time Table"
+                upgradeUuid = "68c5b0f5-5688-466d-a773-67890abcdef1" // Unique ID for your app
+            }
+        }
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
+    }
+}

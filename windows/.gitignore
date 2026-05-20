@@ -1,0 +1,59 @@
+# IDE / Project Specific
+*.iml
+.gradle/
+.kotlin/
+.idea/
+local.properties
+/build/
+/app/build/
+/app/release/
+/app/debug/
+.externalNativeBuild/
+.cxx/
+captures/
+.navigation/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & Temp
+*.log
+*.tmp
+*.bak
+
+# Keystore files
+*.jks
+*.keystore
+
+# Build artifacts
+output/
+tmp/
+*.class
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+
+# IntelliJ IDEA - Extra Run Configs & Output
+out/
+.run/
+*.iws
+
+# Build & Performance
+*.hprof
+*.pyc
+
+# Distribution specific (if not using standard build directory)
+app/dist/

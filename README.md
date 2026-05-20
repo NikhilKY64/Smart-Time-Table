@@ -71,4 +71,4 @@ Your data is stored safely in your user profile, separate from the app folder:
 *   [x] **📁 Robust Storage**: Bypasses Registry limits for unlimited schedule capacity.
 
 ---
-*Developed with ❤️ for the modern classroom.*
+*Developed with Nikhil Kumar Yadav for the modern classroom.*

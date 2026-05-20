@@ -50,4 +50,4 @@ For specific build, packaging, and distribution commands, please reference the r
 *   Build instructions for Windows: [windows/README.md](windows/README.md)
 
 ---
-*Developed with ❤️ by Nikhil Kumar Yadav.*
+*Developed by Nikhil Kumar Yadav.*

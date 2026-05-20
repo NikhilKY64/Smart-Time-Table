@@ -1,10 +1,12 @@
 # 📱 Smart Time Table (Android Edition) 🚀
 
-> [!IMPORTANT]
-> **Android Branch Configuration**
-> This `main` branch is dedicated **specifically to the Android OS version** of the Smart Timetable application. If you are looking for the desktop/Windows multiplatform edition, please switch to the `ForWin` branch.
+> [!WARNING]
+> **Android Edition Status: Work in Progress (Unstable)**
+> The Android edition of this application is currently in an **experimental / pre-alpha state** and does not function correctly on all devices. Development is active, but you may experience bugs or crashes. 
+> 
+> 🤝 **Contributions are highly welcome!** If you are an Android developer and want to help stabilize the Compose UI or overlay service, please feel free to open a Pull Request!
 
-A high-performance, premium timetable application designed specifically for Android devices. Featuring a **system-wide floating overlay service**, it allows students and teachers to keep their schedule accessible at all times—even while using other applications.
+A high-performance, premium timetable application designed for Android devices. Featuring an **experimental system-wide floating overlay service**, it is designed to help students keep their schedule accessible.
 
 ---
 

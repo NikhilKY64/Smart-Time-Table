@@ -10,10 +10,11 @@ This repository houses two optimized editions of the application, custom-built t
 
 To keep both codebases clean, stable, and highly performant, the project is structured into two dedicated directories on this unified branch:
 
-### 📱 [Android Edition](android/)
+### 📱 [Android Edition](android/) (⚠️ Work in Progress / Experimental)
 *   **Location**: [`/android`](android/)
 *   **Language & Stack**: Kotlin, Jetpack Compose, Material 3.
 *   **Key Feature**: **System-Wide Floating Overlay Widget**—displays your timetable on top of other running apps (e.g., during online classes) using `SYSTEM_ALERT_WINDOW` permission.
+*   **Status**: ⚠️ Currently unstable / under active development. May have bugs or crashes.
 *   **Releases**: Pre-compiled APKs ready for instant download in the [`android/APKs/`](android/APKs/) folder.
 *   👉 **[Explore the Android Code & Documentation](android/)**
 

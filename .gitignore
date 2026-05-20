@@ -1,0 +1,28 @@
+# IDE / Project Specific
+*.iml
+.gradle/
+.kotlin/
+.idea/
+**/local.properties
+**/build/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & Temp
+*.log
+*.tmp
+*.bak
+
+# Keystores & Build Outputs
+*.jks
+*.keystore
+**/build/
+**/out/
+**/tmp/
+*.class
+
+# Compose Desktop specific
+**/build/compose/

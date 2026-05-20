@@ -1,4 +1,8 @@
-# 📅 Smart Time Table (Windows Pro) 🚀
+# 📅 Smart Time Table (Windows) 🚀
+
+> [!NOTE]
+> 🟢 **Primary Stable Release**
+> This Windows edition is the main, fully stable, and production-ready version of the **Smart Time Table** application. It is optimized for maximum reliability on personal desktops and classroom interactive smartboards.
 
 A high-performance, premium timetable application for Windows. Featuring a **physics-based "Smart-Hide" overlay system**, it's designed specifically for students, teachers, and smart board environments.
 
@@ -70,5 +74,5 @@ Your data is stored safely in your user profile, separate from the app folder:
 *   [x] **🎨 Premium UI**: 12dp rounded corners, glassmorphism effects, and dynamic gradients.
 *   [x] **📁 Robust Storage**: Bypasses Registry limits for unlimited schedule capacity.
 
----
-*Developed with Nikhil Kumar Yadav for the modern classroom.*
+*Designed and custom-built specifically for school classroom interactive smart boards.*  
+*Developed by Nikhil Kumar Yadav.*

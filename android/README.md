@@ -1,12 +1,12 @@
 # 📱 Smart Time Table (Android Edition) 🚀
 
-> [!WARNING]
-> **Android Edition Status: Work in Progress (Unstable)**
-> The Android edition of this application is currently in an **experimental / pre-alpha state** and does not function correctly on all devices. Development is active, but you may experience bugs or crashes. 
+> [!IMPORTANT]
+> 💻 **Stable Version Ready on Windows!**
+> A fully operational, production-ready, and stable version of this application is ready for **Windows** and located in the [`/windows`](../windows/) directory.
 > 
-> 🤝 **Contributions are highly welcome!** If you are an Android developer and want to help stabilize the Compose UI or overlay service, please feel free to open a Pull Request!
+> 📱 *Note: The Android build inside this folder is currently experimental / incomplete (development suspended) and serves as a mobile layout reference.*
 
-A high-performance, premium timetable application designed for Android devices. Featuring an **experimental system-wide floating overlay service**, it is designed to help students keep their schedule accessible.
+A Kotlin & Jetpack Compose timetable application designed for Android devices. Featuring a system-wide floating overlay service, it is designed to help students keep their schedule accessible on screen.
 
 ---
 

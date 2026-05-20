@@ -10,19 +10,26 @@ This repository houses two optimized editions of the application, custom-built t
 
 To keep both codebases clean, stable, and highly performant, the project is structured into two dedicated directories on this unified branch:
 
-### 📱 [Android Edition](android/) (⚠️ Work in Progress / Experimental)
-*   **Location**: [`/android`](android/)
-*   **Language & Stack**: Kotlin, Jetpack Compose, Material 3.
-*   **Key Feature**: **System-Wide Floating Overlay Widget**—displays your timetable on top of other running apps (e.g., during online classes) using `SYSTEM_ALERT_WINDOW` permission.
-*   **Status**: ⚠️ Currently unstable / under active development. May have bugs or crashes.
-*   **Releases**: Pre-compiled APKs ready for instant download in the [`android/APKs/`](android/APKs/) folder.
+### 📱 [Android Edition](android/)
+*   **Status:** 🚧 Incomplete (Development Suspended)
+*   **Location:** 📂 Located inside the [`/android`](android/) directory.
+*   **Core Tech:** ⚙️ Built using Kotlin, Jetpack Compose, and Android Material 3.
+*   **Purpose:** 🎯 Designed to overlay a floating timetable grid over active apps.
+*   **Key Feature:** ✨ Floating overlay widget using background foreground services.
+*   **Input Limit:** 🚫 Pointer click events on the vertical slider are currently unresponsive.
+*   **Releases:** 📦 Early test packages are available in the [`android/APKs/`](android/APKs/) folder.
 *   👉 **[Explore the Android Code & Documentation](android/)**
 
-### 💻 [Windows Pro Edition](windows/)
-*   **Location**: [`/windows`](windows/)
-*   **Language & Stack**: Kotlin Multiplatform, Compose Multiplatform, Gradle.
-*   **Key Feature**: **Physics-Based "Smart-Hide" Overlay System**—smooth slide-out vertical handle that collapses/expands with dynamic physics gestures. Features native System Tray integration and desktop flyout menus.
-*   **Releases**: Native `.exe` and `.msi` installers generated using WiX Toolset.
+### 💻 [Windows Edition](windows/)
+*   **Status:** ✅ Stable / Fully Operational (Production Ready)
+*   **Location:** 📂 Located inside the [`/windows`](windows/) directory.
+*   **Core Tech:** ⚙️ Built using Kotlin Multiplatform and Compose Multiplatform.
+*   **Purpose:** 🎯 Tailored for classrooms, smart boards, and desktop environments.
+*   **Key Feature:** ✨ Smart-Hide vertical sidebar overlay with spring-physics animation.
+*   **Integration:** 🔌 Native Windows System Tray integration with single-click flyout controls.
+*   **Reliability:** 💾 Custom JSON profile structure to bypass system storage limitations.
+*   **Installers:** 💿 Ready-to-install `.exe` and `.msi` packages generated via WiX.
+*   **Role:** 📌 Primary active branch with regular feature updates and maintenance.
 *   👉 **[Explore the Windows Code & Documentation](windows/)**
 
 ---
@@ -50,5 +57,10 @@ For specific build, packaging, and distribution commands, please reference the r
 *   Build instructions for Android: [android/README.md](android/README.md)
 *   Build instructions for Windows: [windows/README.md](windows/README.md)
 
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ---
+*Designed and custom-built specifically for school classroom interactive smart boards.*  
 *Developed by Nikhil Kumar Yadav.*

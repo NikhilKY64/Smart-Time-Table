@@ -4,13 +4,13 @@ A high-performance, premium timetable application for Windows. Featuring a **phy
 
 ---
 
-## ✨ What's New in v1.2.22 🆕
+## ✨ What's New in v1.3.0 🆕
 
-*   **🚀 Single-Instance Wakeup**: Clicking the desktop icon now intelligently triggers the existing app's slider instead of creating duplicates.
-*   **🖱️ Desktop Flyout Menu**: A native-feeling single-click flyout from the system tray for lightning-fast control.
-*   **🛡️ Boot Intelligence**: Correctly handles Windows startup launches to stay hidden and keep your desktop clean.
-*   **🎯 Interaction Polish**: Slider handle physics now respect your touch/drag gestures and won't auto-collapse while in use.
-*   **🔗 "Open App" Shortcut**: Replaced "Maximize view" with a clearer "Open App" button in the slider panel for better navigation.
+*   **📅 Dynamic Period Configurations**: Create schedules with custom period counts (from 1 up to 15 periods per day) instead of a fixed hardcoded count!
+*   **🧙 3-Step Setup Wizard**: A beautiful step-by-step assistant when creating a new profile to configure name, total period count, and custom recess/break placements.
+*   **➕ Live Period Editing**: Add new periods or safely remove the last period inside "Edit Timetable" with automatic deletion protection dialogs.
+*   **☕ Recess Placements**: Mark break points at any period slot with interactive coffee-recess chips.
+*   **⚡ Auto-scaling Grid Headers**: Edit timetable headers and matrices dynamically scale, resize, and adapt column widths instantly as periods are edited.
 
 ---
 
@@ -31,7 +31,7 @@ To run the app directly from the source:
 ## 📦 Distribution & Releases
 
 ### 🏗️ How to create a New Version (.EXE)
-1.  **🔢 Update Version**: Open `app/build.gradle.kts` and update `versionName` & `packageVersion` to `1.2.22`.
+1.  **🔢 Update Version**: Open `app/build.gradle.kts` and update `versionName` & `packageVersion` to `1.3.0`.
 2.  **🔨 Build Installer**:
     ```powershell
     .\gradlew.bat :app:packageReleaseDistributionForCurrentOS

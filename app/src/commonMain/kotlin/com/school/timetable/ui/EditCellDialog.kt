@@ -22,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -44,7 +46,8 @@ fun EditCellDialog(
     subject: Subject,
     subjectTeachers: Map<String, String>,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String, String) -> Unit,
+    onSaveAndNext: ((String, String) -> Unit)? = null
 ) {
     if (subject.periodIndex == -1) {
         // Just dismiss if they try to edit the break
@@ -78,6 +81,42 @@ fun EditCellDialog(
         },
         text = {
             Column {
+                val allSubjects = subjectTeachers.keys.toList().sorted()
+                if (allSubjects.isNotEmpty()) {
+                    Text(
+                        "Quick Pick Subject:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(bottom = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        allSubjects.forEach { subName ->
+                            val isSelected = name == subName
+                            Surface(
+                                onClick = { name = subName },
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            ) {
+                                Text(
+                                    text = subName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Column(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = name,
@@ -168,12 +207,23 @@ fun EditCellDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    onSave(name.ifEmpty { "Empty" }, teacher.ifEmpty { "-" })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onSaveAndNext != null) {
+                    TextButton(
+                        onClick = {
+                            onSaveAndNext(name.ifEmpty { "Empty" }, teacher.ifEmpty { "-" })
+                        }
+                    ) {
+                        Text("Save & Next")
+                    }
                 }
-            ) {
-                Text("Save")
+                Button(
+                    onClick = {
+                        onSave(name.ifEmpty { "Empty" }, teacher.ifEmpty { "-" })
+                    }
+                ) {
+                    Text("Save")
+                }
             }
         },
         dismissButton = {

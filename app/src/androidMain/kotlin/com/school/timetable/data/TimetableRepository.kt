@@ -15,16 +15,6 @@ actual class TimetableRepository(context: Context) {
     }
 
     actual fun getAllProfiles(): List<TimetableProfile> {
-        val json = prefs.getString("timetable_profiles", null)
-        if (json != null) {
-            return try {
-                jsonHandler.decodeFromString<List<TimetableProfile>>(json)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-        
-        // Simple migration if needed, but for now we'll just return generated
         val defaultProfile = TimetableProfile(
             id = "default",
             name = "Main Timetable",
@@ -33,9 +23,24 @@ actual class TimetableRepository(context: Context) {
             schedules = generateMockData(),
             isActive = true
         )
-        
-        saveAllProfiles(listOf(defaultProfile))
-        return listOf(defaultProfile)
+        val defaultList = listOf(defaultProfile)
+
+        val json = prefs.getString("timetable_profiles", null)
+        val list = if (json != null) {
+            try {
+                val parsed = jsonHandler.decodeFromString<List<TimetableProfile>>(json)
+                if (parsed.isEmpty()) defaultList else parsed
+            } catch (e: Exception) {
+                defaultList
+            }
+        } else {
+            defaultList
+        }
+
+        if (list == defaultList) {
+            saveAllProfiles(defaultList)
+        }
+        return list
     }
 
     actual fun saveAllProfiles(profiles: List<TimetableProfile>) {
@@ -81,5 +86,40 @@ actual class TimetableRepository(context: Context) {
     }
     actual fun saveFavoriteHandleStyles(favorites: Set<HandleStyle>) {
         prefs.edit().putStringSet("favorite_styles", favorites.map { it.name }.toSet()).apply()
+    }
+
+    actual fun isAutoHideOverlayEnabled(): Boolean = prefs.getBoolean("auto_hide_overlay", true)
+    actual fun setAutoHideOverlayEnabled(enabled: Boolean) = prefs.edit().putBoolean("auto_hide_overlay", enabled).apply()
+
+    actual fun isAutoCollapseEnabled(): Boolean = prefs.getBoolean("auto_collapse_enabled", true)
+    actual fun setAutoCollapseEnabled(enabled: Boolean) = prefs.edit().putBoolean("auto_collapse_enabled", enabled).apply()
+    actual fun getAutoCollapseDelay(): Int = prefs.getInt("auto_collapse_delay", 5)
+    actual fun setAutoCollapseDelay(seconds: Int) = prefs.edit().putInt("auto_collapse_delay", seconds).apply()
+
+    actual fun isStartOnStartupEnabled(): Boolean = prefs.getBoolean("start_on_startup", false)
+    actual fun setStartOnStartupEnabled(enabled: Boolean) = prefs.edit().putBoolean("start_on_startup", enabled).apply()
+
+    actual fun isAutoSlideEnabled(): Boolean = prefs.getBoolean("auto_slide_enabled", true)
+    actual fun setAutoSlideEnabled(enabled: Boolean) = prefs.edit().putBoolean("auto_slide_enabled", enabled).apply()
+
+    actual fun getSubjectTeachers(): Map<String, String> {
+        val json = prefs.getString("subject_teachers", null)
+        if (json != null) {
+            return try {
+                jsonHandler.decodeFromString<Map<String, String>>(json)
+            } catch (e: Exception) {
+                emptyMap()
+            }
+        }
+        return emptyMap()
+    }
+
+    actual fun saveSubjectTeachers(teachers: Map<String, String>) {
+        try {
+            val json = jsonHandler.encodeToString(teachers)
+            prefs.edit().putString("subject_teachers", json).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

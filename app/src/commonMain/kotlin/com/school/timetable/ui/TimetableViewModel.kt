@@ -10,7 +10,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import com.school.timetable.data.generateMockData
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -30,6 +34,11 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
 
     private val _workingSchedules = MutableStateFlow<List<DaySchedule>>(emptyList())
     val workingSchedules: StateFlow<List<DaySchedule>> = _workingSchedules.asStateFlow()
+
+    val activeTotalPeriods: StateFlow<Int> = _profiles.map { profiles ->
+        val activeProfile = profiles.find { it.isActive } ?: profiles.firstOrNull()
+        activeProfile?.totalPeriods ?: 8
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 8)
 
     private val _hasUnsavedChanges = MutableStateFlow(false)
     val hasUnsavedChanges: StateFlow<Boolean> = _hasUnsavedChanges.asStateFlow()
@@ -91,6 +100,8 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
     val subjectTeachers: StateFlow<Map<String, String>> = _subjectTeachers.asStateFlow()
 
     private var smartHideJob: kotlinx.coroutines.Job? = null
+    private var lastTriggeredMinute43 = ""
+    private var lastTriggeredMinute14 = ""
 
     init {
         loadData()
@@ -127,26 +138,29 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
                 val sdf24Logic = SimpleDateFormat("HH:mm", Locale.getDefault())
                 currentTime24ForLogic = sdf24Logic.format(cal.time)
                 
-                // Pre-emptive 1.3-second detection for Auto-Peek swiping visibility
                 // Pre-emptive 4.3-second detection to wake up window early (SS:55.7)
                 val calPlus43 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 4300) }
-                if (calPlus43.get(Calendar.SECOND) == 0 && calPlus43.get(Calendar.MILLISECOND) < 150) {
-                    val nextTime = sdf24Logic.format(calPlus43.time)
+                val nextTime43 = sdf24Logic.format(calPlus43.time)
+                if (calPlus43.get(Calendar.SECOND) == 0 && nextTime43 != lastTriggeredMinute43) {
                     val schedule = _schedules.value.find { it.dayOfWeek == day }
-                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
-                    // ONLY wake up handle early if auto-slide is enabled
-                    if (startingSoon && _isAutoSlideEnabled.value) {
-                        setSmartHideVisible(true) // Silently create window
+                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime43 } ?: false
+                    if (startingSoon) {
+                        lastTriggeredMinute43 = nextTime43
+                        // ONLY wake up handle early if auto-slide is enabled
+                        if (_isAutoSlideEnabled.value) {
+                            setSmartHideVisible(true) // Silently create window
+                        }
                     }
                 }
 
                 // Pre-emptive 1.4-second detection for the actual drop-down
                 val calPlus14 = (cal.clone() as Calendar).apply { add(Calendar.MILLISECOND, 1400) }
-                if (calPlus14.get(Calendar.SECOND) == 0 && calPlus14.get(Calendar.MILLISECOND) < 150) {
-                    val nextTime = sdf24Logic.format(calPlus14.time)
+                val nextTime14 = sdf24Logic.format(calPlus14.time)
+                if (calPlus14.get(Calendar.SECOND) == 0 && nextTime14 != lastTriggeredMinute14) {
                     val schedule = _schedules.value.find { it.dayOfWeek == day }
-                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime } ?: false
+                    val startingSoon = schedule?.subjects?.any { it.startTime == nextTime14 } ?: false
                     if (startingSoon && !_isNextPeriodApproaching.value) {
+                        lastTriggeredMinute14 = nextTime14
                         _isNextPeriodApproaching.value = true
                         
                         // Drop down!
@@ -223,6 +237,65 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         _hasUnsavedChanges.value = true
     }
 
+    /** Copies only the name & teacher of [source] into the slot of [target], leaving source unchanged. */
+    fun copySubjectTo(source: Subject, target: Subject) {
+        val schedules = _workingSchedules.value.map { day ->
+            val newSubjects = day.subjects.map { subj ->
+                if (subj.id == target.id) {
+                    subj.copy(name = source.name, teacher = source.teacher)
+                } else subj
+            }
+            day.copy(subjects = newSubjects)
+        }
+        _workingSchedules.value = schedules
+        _hasUnsavedChanges.value = true
+    }
+
+    /** Shifts an entire column left, swapping content and identity but keeping time slots chronologically intact. */
+    fun shiftColumnLeft(columnIndex: Int) {
+        if (columnIndex <= 0) return
+        val currentSchedules = _workingSchedules.value
+        if (currentSchedules.isEmpty() || currentSchedules.first().subjects.size <= columnIndex) return
+        
+        val newSchedules = currentSchedules.map { day ->
+            val newSubjects = day.subjects.toMutableList()
+            val subjectA = newSubjects[columnIndex]
+            val subjectB = newSubjects[columnIndex - 1]
+            
+            newSubjects[columnIndex] = subjectB.copy(
+                id = subjectA.id, startTime = subjectA.startTime, endTime = subjectA.endTime, dayOfWeek = subjectA.dayOfWeek
+            )
+            newSubjects[columnIndex - 1] = subjectA.copy(
+                id = subjectB.id, startTime = subjectB.startTime, endTime = subjectB.endTime, dayOfWeek = subjectB.dayOfWeek
+            )
+            day.copy(subjects = newSubjects)
+        }
+        _workingSchedules.value = newSchedules
+        _hasUnsavedChanges.value = true
+    }
+
+    /** Shifts an entire column right, swapping content and identity but keeping time slots chronologically intact. */
+    fun shiftColumnRight(columnIndex: Int) {
+        val currentSchedules = _workingSchedules.value
+        if (currentSchedules.isEmpty() || columnIndex >= currentSchedules.first().subjects.size - 1) return
+        
+        val newSchedules = currentSchedules.map { day ->
+            val newSubjects = day.subjects.toMutableList()
+            val subjectA = newSubjects[columnIndex]
+            val subjectB = newSubjects[columnIndex + 1]
+            
+            newSubjects[columnIndex] = subjectB.copy(
+                id = subjectA.id, startTime = subjectA.startTime, endTime = subjectA.endTime, dayOfWeek = subjectA.dayOfWeek
+            )
+            newSubjects[columnIndex + 1] = subjectA.copy(
+                id = subjectB.id, startTime = subjectB.startTime, endTime = subjectB.endTime, dayOfWeek = subjectB.dayOfWeek
+            )
+            day.copy(subjects = newSubjects)
+        }
+        _workingSchedules.value = newSchedules
+        _hasUnsavedChanges.value = true
+    }
+
     fun commitWorkingSchedules() {
         val pId = _viewingProfileId.value ?: repository.getActiveProfileId()
         _slidePanelSchedules.value = _workingSchedules.value
@@ -283,13 +356,15 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
         refreshSchedules()
     }
 
-    fun createNewProfile(name: String, copyFromActive: Boolean = false) {
+    fun createNewProfile(name: String, totalPeriods: Int = 8, breakAfterPeriods: List<Int> = listOf(4), copyFromActive: Boolean = false) {
         val currentProfiles = repository.getAllProfiles().toMutableList()
         val newSchedules = if (copyFromActive) {
             repository.getTimetable()
         } else {
-            repository.getTimetable().map { day -> 
-                day.copy(subjects = day.subjects.map { it.copy(name = "", teacher = "") }) 
+            generateMockData(totalPeriods, breakAfterPeriods).map { day -> 
+                day.copy(subjects = day.subjects.map { 
+                    if (it.name != "BREAK") it.copy(name = "", teacher = "", startTime = "", endTime = "") else it 
+                }) 
             }
         }
         
@@ -300,11 +375,73 @@ class TimetableViewModel(private val repository: TimetableRepository) : ViewMode
             createdAt = time,
             updatedAt = time,
             schedules = newSchedules,
+            totalPeriods = totalPeriods,
+            breakAfterPeriods = breakAfterPeriods,
             isActive = false
         )
         currentProfiles.add(newProfile)
         repository.saveAllProfiles(currentProfiles)
         _profiles.value = repository.getAllProfiles()
+    }
+
+    fun addPeriod() {
+        val currentWorking = _workingSchedules.value
+        if (currentWorking.isEmpty()) return
+        
+        val maxPeriodIndex = currentWorking.first().subjects.maxOfOrNull { it.periodIndex } ?: 0
+        val newPeriodIndex = maxPeriodIndex + 1
+        
+        val newWorking = currentWorking.map { daySchedule ->
+            val newSubject = Subject(
+                id = "${daySchedule.dayOfWeek}_new_$newPeriodIndex",
+                name = "",
+                teacher = "",
+                periodIndex = newPeriodIndex,
+                startTime = "",
+                endTime = "",
+                dayOfWeek = daySchedule.dayOfWeek
+            )
+            daySchedule.copy(subjects = daySchedule.subjects + newSubject)
+        }
+        
+        _workingSchedules.value = newWorking
+        _hasUnsavedChanges.value = true
+        
+        updateViewingProfileTotalPeriods(newWorking)
+    }
+    
+    fun removePeriod() {
+        val currentWorking = _workingSchedules.value
+        if (currentWorking.isEmpty()) return
+        
+        val maxPeriodIndex = currentWorking.first().subjects.maxOfOrNull { it.periodIndex } ?: 0
+        if (maxPeriodIndex <= 1) return // Don't remove the last period
+        
+        val newWorking = currentWorking.map { daySchedule ->
+            val newSubjects = daySchedule.subjects.filter { it.periodIndex != maxPeriodIndex }
+            daySchedule.copy(subjects = newSubjects)
+        }
+        
+        _workingSchedules.value = newWorking
+        _hasUnsavedChanges.value = true
+        
+        updateViewingProfileTotalPeriods(newWorking)
+    }
+
+    private fun updateViewingProfileTotalPeriods(newWorking: List<DaySchedule>) {
+        val pId = _viewingProfileId.value ?: repository.getActiveProfileId()
+        val profilesList = _profiles.value.toMutableList()
+        val index = profilesList.indexOfFirst { it.id == pId }
+        if (index != -1) {
+            val oldProfile = profilesList[index]
+            val newTotal = newWorking.firstOrNull()?.subjects?.filter { it.periodIndex != -1 }?.size ?: oldProfile.totalPeriods
+            
+            // Also need to save this working schedule to the profile so totalPeriods stays in sync
+            val updatedProfile = oldProfile.copy(totalPeriods = newTotal, schedules = newWorking)
+            profilesList[index] = updatedProfile
+            _profiles.value = profilesList
+            repository.saveAllProfiles(profilesList)
+        }
     }
 
     fun deleteProfile(profileId: String) {

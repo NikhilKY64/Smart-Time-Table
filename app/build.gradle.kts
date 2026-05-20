@@ -7,9 +7,17 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
     
-    jvm("desktop")
+    jvm("desktop") {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
 
     targets.all {
         compilations.all {
@@ -60,8 +68,8 @@ android {
         applicationId = "com.school.timetable"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.2.22"
+        versionCode = 8
+        versionName = "1.3.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -89,7 +97,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "Smart Time Table"
-            packageVersion = "1.2.22"
+            packageVersion = "1.3.0"
             vendor = "Nikhil Kumar Yadav XII-E (2026-27)"
             description = "A smart school timetable application."
             copyright = "© 2026 Nikhil Kumar Yadav. All rights reserved."

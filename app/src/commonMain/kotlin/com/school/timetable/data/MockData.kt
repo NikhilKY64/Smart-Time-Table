@@ -2,7 +2,7 @@ package com.school.timetable.data
 
 import java.util.Calendar
 
-fun generateMockData(): List<DaySchedule> {
+fun generateMockData(totalPeriods: Int = 8, breakAfterPeriods: List<Int> = listOf(4)): List<DaySchedule> {
     val days = listOf(
         Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY,
         Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY
@@ -12,17 +12,15 @@ fun generateMockData(): List<DaySchedule> {
         return Subject("${d}_$i", name.replace("\n", " "), teacher.replace("\n", " "), p, start, end, d)
     }
 
-    val timings = listOf(
-        "07:10" to "07:50", // 1
-        "07:50" to "08:25", // 2
-        "08:25" to "09:00", // 3
-        "09:00" to "09:35", // 4
-        "09:35" to "09:55", // BREAK
-        "09:55" to "10:35", // 5
-        "10:35" to "11:10", // 6
-        "11:10" to "11:45", // 7
-        "11:45" to "12:20"  // 8
-    )
+    // Default timings based on a standard 40-min period.
+    // In a real scenario, this would be customizable or generated.
+    fun getDummyTiming(index: Int): Pair<String, String> {
+        val startHour = 7 + (index * 40) / 60
+        val startMin = (10 + (index * 40)) % 60
+        val endHour = 7 + ((index + 1) * 40) / 60
+        val endMin = (10 + ((index + 1) * 40)) % 60
+        return String.format("%02d:%02d", startHour, startMin) to String.format("%02d:%02d", endHour, endMin)
+    }
 
     val rawData = mapOf(
         Calendar.MONDAY to listOf(
@@ -52,16 +50,29 @@ fun generateMockData(): List<DaySchedule> {
     )
 
     return days.map { day ->
-        var idx = 0
+        var dataIdx = 0
+        var periodCounter = 1
         val todayClasses = rawData[day] ?: emptyList()
-        val subjects = timings.mapIndexed { index, timing ->
-            if (index == 4) {
-                createSubj(day, index, -1, "BREAK", "", timing.first, timing.second)
-            } else {
-                val pIdx = if (index < 4) index + 1 else index
-                val data = todayClasses.getOrNull(idx++) ?: ("" to "")
-                createSubj(day, index, pIdx, data.first, data.second, timing.first, timing.second)
+        val subjects = mutableListOf<Subject>()
+        
+        var currentIndex = 0
+        while (periodCounter <= totalPeriods) {
+            val timing = getDummyTiming(currentIndex)
+            
+            // Check if a break should happen BEFORE this period starts
+            // e.g. breakAfterPeriods = listOf(4) means break happens when periodCounter is about to be 5
+            if (breakAfterPeriods.contains(periodCounter - 1) && subjects.lastOrNull()?.name != "BREAK") {
+                subjects.add(createSubj(day, currentIndex, -1, "BREAK", "", timing.first, timing.second))
+                currentIndex++
+                continue
             }
+            
+            val data = todayClasses.getOrNull(dataIdx++) ?: ("" to "")
+            val timingForPeriod = getDummyTiming(currentIndex) // recalculate timing for period
+            subjects.add(createSubj(day, currentIndex, periodCounter, data.first, data.second, timingForPeriod.first, timingForPeriod.second))
+            
+            periodCounter++
+            currentIndex++
         }
         DaySchedule(dayOfWeek = day, subjects = subjects)
     }

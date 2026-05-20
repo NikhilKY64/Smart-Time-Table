@@ -45,15 +45,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.school.timetable.data.Subject
 import com.school.timetable.ui.theme.*
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TimetableScreen(
     viewModel: TimetableViewModel,
@@ -380,7 +383,7 @@ fun TimetableScreen(
                 if (todaySchedule != null) {
                     LazyRow(
                         state = mainListState,
-                        modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f),
+                        modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.40f),
                         contentPadding = PaddingValues(horizontal = 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
@@ -403,7 +406,7 @@ fun TimetableScreen(
                         }
                     }
                 } else {
-                    Box(modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.55f), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(if (isOverlayActive) 1f else 0.40f), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             val sundayMessage = if (currentDay == Calendar.SUNDAY) {
                                 "Enjoy your Sunday! \uD83C\uDF1F\nNo classes scheduled."
@@ -423,7 +426,7 @@ fun TimetableScreen(
 
                 if (!isOverlayActive) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().weight(0.45f).padding(24.dp)
+                        modifier = Modifier.fillMaxWidth().weight(0.60f).padding(horizontal = 24.dp, vertical = 12.dp)
                     ) {
                         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                             val isNarrow = maxWidth < 550.dp
@@ -505,8 +508,9 @@ fun TimetableScreen(
                         }
                         Spacer(Modifier.height(16.dp))
                         LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp)
                         ) {
                             items(profiles, key = { it.id }) { profile ->
                                 ProfileCard(
@@ -541,7 +545,7 @@ fun TimetableScreen(
             ) {
                 var showDiscardDialog by remember { mutableStateOf(false) }
                 
-                if (showDiscardDialog) {
+                if (showDiscardDialog) {0
                     AlertDialog(
                         onDismissRequest = { showDiscardDialog = false },
                         title = { Text("Unsaved Changes") },
@@ -579,6 +583,9 @@ fun TimetableScreen(
                     var dragPosition by remember { mutableStateOf(Offset.Zero) }
                     val cellLayouts = remember { mutableMapOf<String, Rect>() }
                     var sliderBounds by remember { mutableStateOf(Rect.Zero) }
+                    // Pending drop action — set on drag end, cleared after user picks Swap/Copy
+                    var dragPendingSource by remember { mutableStateOf<Subject?>(null) }
+                    var dragPendingTarget by remember { mutableStateOf<Subject?>(null) }
 
                     // Menu Surface
                     Surface(
@@ -621,26 +628,56 @@ fun TimetableScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { dayOffset-- }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                                    }
-                                    
-                                    Spacer(Modifier.width(8.dp))
-                                    
                                     Text(
-                                        text = if (dayOffset == 0) "Weekly Overview" else "Overview • $dayName",
-                                        fontSize = 28.sp, // Maintained large size
+                                        text = "Weekly Overview",
+                                        fontSize = 28.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (dayOffset == 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    
-                                    Spacer(Modifier.width(8.dp))
-                                    
-                                    IconButton(onClick = { dayOffset++ }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                                    }
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Dynamic Period Editing Controls
+                                    var showRemoveConfirm by remember { mutableStateOf(false) }
+                                    
+                                    TextButton(
+                                        onClick = { viewModel.addPeriod() }
+                                    ) {
+                                        Icon(Icons.Default.Add, null)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Add Period")
+                                    }
+                                    
+                                    TextButton(
+                                        onClick = { showRemoveConfirm = true },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Default.Delete, null)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Remove Last")
+                                    }
+                                    
+                                    if (showRemoveConfirm) {
+                                        AlertDialog(
+                                            onDismissRequest = { showRemoveConfirm = false },
+                                            title = { Text("Remove Last Period?", fontWeight = FontWeight.Bold) },
+                                            text = { Text("This will permanently delete the last period across all days. This cannot be undone.") },
+                                            confirmButton = {
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.removePeriod()
+                                                        showRemoveConfirm = false
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                                ) {
+                                                    Text("Remove")
+                                                }
+                                            },
+                                            dismissButton = {
+                                                TextButton(onClick = { showRemoveConfirm = false }) { Text("Cancel") }
+                                            }
+                                        )
+                                    }
+
                                     if (hasUnsavedChanges) {
                                         Button(
                                             onClick = { viewModel.commitWorkingSchedules() },
@@ -700,19 +737,45 @@ fun TimetableScreen(
                                         modifier = Modifier.weight(1f).horizontalScroll(overlayWeeklyScrollState),
                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
+                                        val workingSchedules by viewModel.workingSchedules.collectAsState()
+                                        val workingBellTimings = workingSchedules.firstOrNull()?.subjects ?: emptyList()
+                                        
                                         // Top Header (Bell Timings)
                                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            viewModel.getGlobalBellTimings().forEach { timing ->
+                                            workingBellTimings.forEachIndexed { index, timing ->
                                                 Surface(
                                                      modifier = Modifier.width((140 * screenMultiplier).dp),
                                                      color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                      shape = RoundedCornerShape(8.dp)
                                                 ) {
-                                                     val periodLabel = if (timing.periodIndex == -1) "BREAK" else if(timing.periodIndex == 0) "Zero" else "P-${timing.periodIndex}"
+                                                     val isBreak = timing.periodIndex == -1
+                                                     val periodLabel = if (isBreak) "BREAK" else if(timing.periodIndex == 0) "Zero" else "P-${timing.periodIndex}"
                                                      Column(modifier = Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                         Text(periodLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                         Row(verticalAlignment = Alignment.CenterVertically) {
+                                                             if (isBreak && index > 0) {
+                                                                 Icon(
+                                                                     Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, 
+                                                                     tint = MaterialTheme.colorScheme.primary,
+                                                                     modifier = Modifier.size(16.dp).clickable { viewModel.shiftColumnLeft(index) }.pointerHoverIcon(PointerIcon.Hand)
+                                                                 )
+                                                                 Spacer(Modifier.width(4.dp))
+                                                             }
+                                                             Text(periodLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                             if (isBreak && index < workingBellTimings.size - 1) {
+                                                                 Spacer(Modifier.width(4.dp))
+                                                                 Icon(
+                                                                     Icons.AutoMirrored.Filled.KeyboardArrowRight, null, 
+                                                                     tint = MaterialTheme.colorScheme.primary,
+                                                                     modifier = Modifier.size(16.dp).clickable { viewModel.shiftColumnRight(index) }.pointerHoverIcon(PointerIcon.Hand)
+                                                                 )
+                                                             }
+                                                         }
                                                          Spacer(Modifier.height(4.dp))
-                                                         Text("${formatTime(timing.startTime)} - ${formatTime(timing.endTime)}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                         Text(
+                                                             text = if (timing.startTime.isBlank() || timing.endTime.isBlank()) "--:--" else "${formatTime(timing.startTime)} - ${formatTime(timing.endTime)}",
+                                                             fontSize = 10.sp,
+                                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                         )
                                                      }
                                                 }
                                             }
@@ -724,40 +787,44 @@ fun TimetableScreen(
                                             if (daySched != null) {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                                     daySched.subjects.forEach { subject ->
+                                                        val isBreak = subject.periodIndex == -1
                                                         CompactTimetableCard(
                                                             subject = subject,
                                                             isCurrent = subject.id == currentPeriodId,
                                                             timeFormatter = formatTime,
-                                                            onClick = { subjectToEdit = subject },
+                                                            onClick = { if (!isBreak) subjectToEdit = subject },
                                                             isDragged = draggedSubject?.id == subject.id,
                                                             modifier = Modifier
-                                                                .onGloballyPositioned { cellLayouts[subject.id] = it.boundsInWindow() }
-                                                                .pointerInput(subject) {
-                                                                    detectDragGesturesAfterLongPress(
-                                                                        onDragStart = { _ ->
-                                                                            val bounds = cellLayouts[subject.id]
-                                                                            if (bounds != null) {
-                                                                                dragPosition = bounds.topLeft
-                                                                                draggedSubject = subject
+                                                                .onGloballyPositioned { cellLayouts[subject.id] = it.boundsInWindow() },
+                                                            dragModifier = if (!isBreak) Modifier.pointerInput(subject) {
+                                                                detectDragGestures(
+                                                                    onDragStart = { _ ->
+                                                                        val bounds = cellLayouts[subject.id]
+                                                                        if (bounds != null) {
+                                                                            dragPosition = bounds.topLeft
+                                                                            draggedSubject = subject
+                                                                        }
+                                                                    },
+                                                                    onDrag = { change, dragAmount ->
+                                                                        change.consume()
+                                                                        dragPosition += dragAmount
+                                                                    },
+                                                                    onDragEnd = {
+                                                                        val centerOfDrag = Offset(dragPosition.x + 90.dp.toPx(), dragPosition.y + 70.dp.toPx())
+                                                                        val targetEntry = cellLayouts.entries.find { it.value.contains(centerOfDrag) }
+                                                                        if (targetEntry != null && targetEntry.key != subject.id) {
+                                                                            val workingLists = viewModel.workingSchedules.value
+                                                                            val targetSubject = workingLists.flatMap { it.subjects }.find { it.id == targetEntry.key }
+                                                                            if (targetSubject != null && targetSubject.periodIndex != -1) {
+                                                                                dragPendingSource = subject
+                                                                                dragPendingTarget = targetSubject
                                                                             }
-                                                                        },
-                                                                        onDrag = { change, dragAmount ->
-                                                                            change.consume()
-                                                                            dragPosition += dragAmount
-                                                                        },
-                                                                        onDragEnd = {
-                                                                            val centerOfDrag = Offset(dragPosition.x + 90.dp.toPx(), dragPosition.y + 70.dp.toPx())
-                                                                            val targetEntry = cellLayouts.entries.find { it.value.contains(centerOfDrag) }
-                                                                            if (targetEntry != null && targetEntry.key != subject.id) {
-                                                                                val workingLists = viewModel.workingSchedules.value
-                                                                                val targetSubject = workingLists.flatMap { it.subjects }.find { it.id == targetEntry.key }
-                                                                                if (targetSubject != null) viewModel.swapSubjects(subject, targetSubject)
-                                                                            }
-                                                                            draggedSubject = null
-                                                                        },
-                                                                        onDragCancel = { draggedSubject = null }
-                                                                    )
-                                                                }
+                                                                        }
+                                                                        draggedSubject = null
+                                                                    },
+                                                                    onDragCancel = { draggedSubject = null }
+                                                                )
+                                                            } else Modifier
                                                         )
                                                     }
                                                 }
@@ -798,6 +865,70 @@ fun TimetableScreen(
                             )
                         }
                     }
+
+                    // Swap / Copy popup after drop
+                    if (dragPendingSource != null && dragPendingTarget != null) {
+                        val src = dragPendingSource!!
+                        val tgt = dragPendingTarget!!
+                        AlertDialog(
+                            onDismissRequest = {
+                                dragPendingSource = null
+                                dragPendingTarget = null
+                            },
+                            title = {
+                                Text(
+                                    "Move \"${src.name}\"",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "→ Target: \"${tgt.name}\"\n\nChoose what to do:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        viewModel.swapSubjects(src, tgt)
+                                        dragPendingSource = null
+                                        dragPendingTarget = null
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Swap", fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.copySubjectTo(src, tgt)
+                                            dragPendingSource = null
+                                            dragPendingTarget = null
+                                        },
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Copy Here")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            dragPendingSource = null
+                                            dragPendingTarget = null
+                                        }
+                                    ) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -813,6 +944,26 @@ fun TimetableScreen(
                     // Times come from the subject unchanged — only name/teacher are editable here.
                     viewModel.updateSubject(sub, name, teacher, sub.startTime, sub.endTime)
                     subjectToEdit = null
+                },
+                onSaveAndNext = { name, teacher ->
+                    viewModel.updateSubject(sub, name, teacher, sub.startTime, sub.endTime)
+                    
+                    // Automatically find the next period on the same day that is not a break
+                    val daySched = viewModel.workingSchedules.value.find { it.dayOfWeek == sub.dayOfWeek }
+                    if (daySched != null) {
+                        val nextSub = daySched.subjects
+                            .filter { it.periodIndex != -1 } // Skip break times
+                            .filter { it.periodIndex > sub.periodIndex } // Must be after current period
+                            .minByOrNull { it.periodIndex } // Get the closest next period
+                        
+                        if (nextSub != null) {
+                            subjectToEdit = nextSub // Instantly swap to edit the next period!
+                        } else {
+                            subjectToEdit = null // End of the day, close dialog
+                        }
+                    } else {
+                        subjectToEdit = null
+                    }
                 }
             )
         }
@@ -839,40 +990,185 @@ fun TimetableScreen(
         }
 
         if (showCreateProfileDialog) {
+            var currentStep by remember { mutableStateOf(1) }
             var newProfileName by remember { mutableStateOf("") }
             var copyCurrent by remember { mutableStateOf(false) }
+            var totalPeriods by remember { mutableStateOf(8) }
+            val breakAfterPeriods = remember { mutableStateListOf<Int>(4) }
             
             AlertDialog(
                 onDismissRequest = { showCreateProfileDialog = false },
-                title = { Text("New Timetable", fontWeight = FontWeight.Bold) },
+                title = { 
+                    Text(
+                        text = when (currentStep) {
+                            1 -> "1. Name Your Timetable"
+                            2 -> "2. Select Number of Periods"
+                            else -> "3. Add Break Column"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = newProfileName,
-                            onValueChange = { newProfileName = it },
-                            label = { Text("Profile Name") }
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = copyCurrent, onCheckedChange = { copyCurrent = it })
-                            Text("Copy from active timetable")
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        when (currentStep) {
+                            1 -> {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        "Give your new profile a clear name (e.g. 'Standard Class Schedule').",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    OutlinedTextField(
+                                        value = newProfileName,
+                                        onValueChange = { newProfileName = it },
+                                        label = { Text("Profile Name") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Surface(
+                                        onClick = { copyCurrent = !copyCurrent },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (copyCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent,
+                                        border = BorderStroke(1.dp, if (copyCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Checkbox(checked = copyCurrent, onCheckedChange = { copyCurrent = it })
+                                            Spacer(Modifier.width(8.dp))
+                                            Column {
+                                                Text("Copy Active Timetable", fontWeight = FontWeight.Bold)
+                                                Text("Duplicate current subjects & structure", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            2 -> {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        "How many class periods do you have per day?",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.align(Alignment.Start)
+                                    )
+                                    
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                                        modifier = Modifier.padding(vertical = 16.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = { if (totalPeriods > 1) totalPeriods-- },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                                        ) {
+                                            Text("-", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                        
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = "$totalPeriods",
+                                                style = MaterialTheme.typography.displayMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text("Periods", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        
+                                        IconButton(
+                                            onClick = { if (totalPeriods < 15) totalPeriods++ },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                                        ) {
+                                            Text("+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            3 -> {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        "Tap the slots to add breaks between periods.",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        for (gap in 1 until totalPeriods) {
+                                            val isSelected = breakAfterPeriods.contains(gap)
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    if (isSelected) {
+                                                        breakAfterPeriods.remove(gap)
+                                                    } else {
+                                                        breakAfterPeriods.add(gap)
+                                                    }
+                                                },
+                                                label = { Text("Set break after P$gap") },
+                                                leadingIcon = {
+                                                    if (isSelected) {
+                                                        Text("☕", modifier = Modifier.padding(end = 4.dp))
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
                 confirmButton = {
-                    Button(onClick = {
-                        if (newProfileName.isNotBlank()) {
-                            viewModel.createNewProfile(newProfileName, copyCurrent)
-                            showCreateProfileDialog = false
-                        }
-                    }) {
-                        Text("Create")
+                    Button(
+                        onClick = {
+                            if (currentStep < 3 && !(currentStep == 1 && copyCurrent)) {
+                                currentStep++
+                            } else {
+                                if (newProfileName.isNotBlank()) {
+                                    viewModel.createNewProfile(
+                                        name = newProfileName,
+                                        totalPeriods = totalPeriods,
+                                        breakAfterPeriods = breakAfterPeriods.toList(),
+                                        copyFromActive = copyCurrent
+                                    )
+                                    showCreateProfileDialog = false
+                                }
+                            }
+                        },
+                        enabled = currentStep > 1 || newProfileName.isNotBlank()
+                    ) {
+                        Text(
+                            text = if (currentStep == 3 || (currentStep == 1 && copyCurrent)) "Create Schedule" else "Next"
+                        )
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showCreateProfileDialog = false }) { Text("Cancel") }
+                    TextButton(
+                        onClick = {
+                            if (currentStep > 1) {
+                                currentStep--
+                            } else {
+                                showCreateProfileDialog = false
+                            }
+                        }
+                    ) {
+                        Text(text = if (currentStep == 1) "Cancel" else "Back")
+                    }
                 }
             )
         }
+
 
         if (showTeacherManager) {
             val teachers by viewModel.subjectTeachers.collectAsState()
@@ -1017,7 +1313,14 @@ fun TimetableScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { showSettingsDialog = false; showAbout = false; showHandleStyleSelector = false }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            showSettingsDialog = false
+                            showAbout = false
+                            showHandleStyleSelector = false
+                        }
                 )
 
                 // Settings Pane Content
@@ -1026,7 +1329,10 @@ fun TimetableScreen(
                         .fillMaxHeight()
                         .width(360.dp)
                         .align(Alignment.CenterEnd)
-                        .clickable { /* absorb taps */ },
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* absorb taps */ },
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
                     shadowElevation = 16.dp 
@@ -1233,7 +1539,7 @@ fun TimetableScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "Smart Timetable Version 1.2.22", 
+                                text = "Smart Timetable Version 1.3.0", 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), 
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
@@ -1286,7 +1592,8 @@ fun ModernTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
-    var isHovered by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
     val screenMultiplier = 1.1f
 
     val baseModifier = Modifier
@@ -1294,8 +1601,7 @@ fun ModernTimetableCard(
         .width((220 * screenMultiplier).dp)
         .height((220 * screenMultiplier).dp) // Reduced height for main app
         .clip(RoundedCornerShape(24.dp))
-        .onPointerEvent(PointerEventType.Enter) { isHovered = true }
-        .onPointerEvent(PointerEventType.Exit) { isHovered = false }
+        .hoverable(interactionSource)
         .pointerHoverIcon(PointerIcon.Hand)
         .clickable { onClick() }
         
@@ -1407,6 +1713,7 @@ fun CompactTimetableCard(
     timeFormatter: (String) -> String,
     onClick: () -> Unit,
     isDragged: Boolean = false,
+    dragModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     val isBreak = subject.periodIndex == -1
@@ -1426,7 +1733,8 @@ fun CompactTimetableCard(
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     )
 
-    var isHovered by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
     val screenMultiplier = 1.1f
 
     val baseModifier = modifier
@@ -1434,8 +1742,7 @@ fun CompactTimetableCard(
         .width((140 * screenMultiplier).dp)
         .height((125 * screenMultiplier).dp)
         .clip(RoundedCornerShape(16.dp))
-        .onPointerEvent(PointerEventType.Enter) { isHovered = true }
-        .onPointerEvent(PointerEventType.Exit) { isHovered = false }
+        .hoverable(interactionSource)
         .pointerHoverIcon(PointerIcon.Hand)
         .clickable { onClick() }
         .then(if (isDragged) Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)) else Modifier)
@@ -1492,13 +1799,40 @@ fun CompactTimetableCard(
             
             Spacer(modifier = Modifier.weight(1f)) // Push teacher name to bottom
             
-            Text(
-                text = if (isBreak) "" else subject.teacher,
-                fontSize = (10 * screenMultiplier).sp,
-                fontWeight = FontWeight.Medium,
-                color = if (isCurrent) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isBreak) "" else subject.teacher,
+                    fontSize = (10 * screenMultiplier).sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isCurrent) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                if (dragModifier != Modifier && !isBreak) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = dragModifier
+                            .size(24.dp)
+                            .pointerHoverIcon(PointerIcon.Hand)
+                            .background(
+                                color = if (isCurrent) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(6.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Drag to swap",
+                            tint = if (isCurrent) Color.White else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1513,6 +1847,7 @@ fun ProfileCard(
     val dateStr = formatter.format(java.util.Date(profile.createdAt))
     val updateStr = formatter.format(java.util.Date(profile.updatedAt))
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showDeleteConf by remember { mutableStateOf(false) }
 
     if (showConfirmDialog) {
         AlertDialog(
@@ -1531,62 +1866,129 @@ fun ProfileCard(
         )
     }
 
+    if (showDeleteConf) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConf = false },
+            title = { Text("Delete Profile") },
+            text = { Text("Are you sure you want to permanently delete '${profile.name}'?") },
+            confirmButton = {
+                TextButton(onClick = { onDeleteClick(); showDeleteConf = false }) { 
+                    Text("Delete", color = MaterialTheme.colorScheme.error) 
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConf = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Surface(
         modifier = Modifier
-            .width(280.dp)
+            .width(260.dp)
+            .wrapContentHeight()
             .border(
                 width = if (profile.isActive) 2.dp else 1.dp,
                 color = if (profile.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),
-        color = if (profile.isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        color = if (profile.isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(profile.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-                
-                Row {
-                    IconButton(onClick = onEditClick) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Full Timetable", tint = MaterialTheme.colorScheme.primary)
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            // Header row: name + action icons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = profile.name,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    // Period count badge
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "${profile.totalPeriods} Periods",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onEditClick, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                     if (!profile.isActive) {
-                        var showDeleteConf by remember { mutableStateOf(false) }
-                        IconButton(onClick = { showDeleteConf = true }) {
-                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Profile", tint = MaterialTheme.colorScheme.error)
-                        }
-                        if (showDeleteConf) {
-                            AlertDialog(
-                                onDismissRequest = { showDeleteConf = false },
-                                title = { Text("Delete Profile") },
-                                text = { Text("Are you sure you want to permanently delete '${profile.name}'?") },
-                                confirmButton = {
-                                    TextButton(onClick = { onDeleteClick(); showDeleteConf = false }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showDeleteConf = false }) { Text("Cancel") }
-                                }
+                        IconButton(onClick = { showDeleteConf = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Text("Created: $dateStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Updated: $updateStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(16.dp))
-            
+
+            Spacer(Modifier.height(10.dp))
+
+            // Dates
+            Text(
+                text = "Created: $dateStr",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Text(
+                text = "Updated: $updateStr",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            // Set Active Button — always visible
             Button(
                 onClick = { if (!profile.isActive) showConfirmDialog = true },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(42.dp),
                 contentPadding = PaddingValues(0.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (profile.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (profile.isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    contentColor = if (profile.isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary,
+                    disabledContentColor = Color.White
+                ),
+                enabled = !profile.isActive
             ) {
-                Text(if (profile.isActive) "ACTIVE" else "Set Active", fontWeight = FontWeight.Bold)
+                if (profile.isActive) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    text = if (profile.isActive) "ACTIVE" else "Set Active",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
             }
         }
     }

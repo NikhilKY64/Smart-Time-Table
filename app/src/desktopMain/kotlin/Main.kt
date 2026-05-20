@@ -70,6 +70,13 @@ fun main(args: Array<String>) {
             var isOverlayActive by remember { mutableStateOf(true) }
             var isWindowVisible by remember { mutableStateOf(!isStartupLaunch) }
             var showTrayMenu by remember { mutableStateOf(false) }
+
+            val safeExit = {
+                if (viewModel.hasUnsavedChanges.value) {
+                    viewModel.commitWorkingSchedules()
+                }
+                exitApplication()
+            }
         
             // Flow-driven States
             val isOverlayExpanded by viewModel.isOverlayExpanded.collectAsState()
@@ -82,18 +89,20 @@ fun main(args: Array<String>) {
             // Background Observer for Period Changes (Persistence Logic)
             val isAutoSlideEnabled by viewModel.isAutoSlideEnabled.collectAsState()
             
-            LaunchedEffect(currentPeriodId) {
-                if (currentPeriodId != null && currentPeriodId != lastPeriodId) {
-                    // Wake up and show expanded for 2 seconds on actual start
-                    // ONLY if auto-slide is enabled
-                    if (isOverlayActive && isAutoSlideEnabled) {
-                        viewModel.setOverlayExpanded(true)
-                        scope.launch {
-                            delay(3500) 
-                            viewModel.setOverlayExpanded(false)
+            LaunchedEffect(currentPeriodId, isOverlayActive) {
+                if (currentPeriodId != null && isOverlayActive) {
+                    if (currentPeriodId != lastPeriodId) {
+                        // Wake up and show expanded for 2 seconds on actual start
+                        // ONLY if auto-slide is enabled
+                        if (isAutoSlideEnabled) {
+                            viewModel.setOverlayExpanded(true)
+                            scope.launch {
+                                delay(3500) 
+                                viewModel.setOverlayExpanded(false)
+                            }
                         }
+                        lastPeriodId = currentPeriodId
                     }
-                    lastPeriodId = currentPeriodId
                 }
             }
 
@@ -159,7 +168,7 @@ fun main(args: Array<String>) {
                 menu = {
                     Item("Open Smart Controls", onClick = { showTrayMenu = true })
                     Separator()
-                    Item("Exit App", onClick = ::exitApplication)
+                    Item("Exit App", onClick = safeExit)
                 }
             )
 
@@ -167,14 +176,23 @@ fun main(args: Array<String>) {
                 if (!isOverlayActive) {
                     // Main App Window
                     Window(
-                        onCloseRequest = { isWindowVisible = false }, 
+                        onCloseRequest = { 
+                            if (viewModel.hasUnsavedChanges.value) {
+                                viewModel.commitWorkingSchedules()
+                            }
+                            isWindowVisible = false
+                        }, 
                         title = "Smart Timetable",
                         icon = icon,
                         state = rememberWindowState(placement = WindowPlacement.Maximized)
                     ) {
                         App(
                             viewModel = viewModel, 
-                            onToggleOverlay = { isOverlayActive = true },
+                            onToggleOverlay = { 
+                                isOverlayActive = true 
+                                viewModel.setSmartHideVisible(true)
+                                viewModel.setOverlayExpanded(true)
+                            },
                             isOverlayActive = false
                         )
                     }
@@ -393,7 +411,7 @@ fun main(args: Array<String>) {
                     onCloseRequest = { showTrayMenu = false },
                     state = rememberDialogState(
                         width = 280.dp,
-                        height = 300.dp,
+                        height = 320.dp,
                         position = WindowPosition(Alignment.BottomEnd)
                     ),
                     undecorated = true,
@@ -405,7 +423,7 @@ fun main(args: Array<String>) {
                         window.isAlwaysOnTop = true
                         val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
                         val trayMenuWidth = 280
-                        val trayMenuHeight = 300
+                        val trayMenuHeight = 320
                         window.setLocation(screen.width - trayMenuWidth - 20, screen.height - trayMenuHeight - 60)
                     }
 
@@ -433,13 +451,13 @@ fun main(args: Array<String>) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             IconButton(
                                 onClick = { showTrayMenu = false },
-                                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(32.dp)
+                                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(48.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Close, 
                                     contentDescription = "Close Menu",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
 
@@ -478,6 +496,7 @@ fun main(args: Array<String>) {
                                     onClick = { 
                                         isWindowVisible = true
                                         isOverlayActive = true
+                                        viewModel.setSmartHideVisible(true)
                                         viewModel.setOverlayExpanded(true)
                                         showTrayMenu = false
                                     },
@@ -503,7 +522,7 @@ fun main(args: Array<String>) {
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
@@ -520,7 +539,7 @@ fun main(args: Array<String>) {
                                         Switch(
                                             checked = isAutoSlideEnabledByVM,
                                             onCheckedChange = { viewModel.setAutoSlideEnabled(it) },
-                                            modifier = Modifier.scale(0.7f),
+                                            modifier = Modifier.scale(0.85f),
                                             colors = SwitchDefaults.colors(
                                                 checkedThumbColor = MaterialTheme.colorScheme.primary,
                                                 checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
@@ -532,13 +551,13 @@ fun main(args: Array<String>) {
                                 Spacer(Modifier.weight(1f))
 
                                 Surface(
-                                    onClick = ::exitApplication,
+                                    onClick = safeExit,
                                     shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(8.dp),
+                                        modifier = Modifier.padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.Center
                                     ) {

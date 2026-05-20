@@ -9,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.school.timetable.data.TimetableRepository
 import com.school.timetable.ui.TimetableViewModel
 import com.school.timetable.ui.TimetableViewModelFactory

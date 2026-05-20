@@ -19,26 +19,33 @@ actual class TimetableRepository {
     private val profilesFile = File(storageDir, "profiles.json")
 
     actual fun getAllProfiles(): List<TimetableProfile> {
+        val defaultProfile = TimetableProfile(
+            id = "default",
+            name = "Main Timetable",
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            schedules = generateMockData(),
+            isActive = true
+        )
+        val defaultList = listOf(defaultProfile)
+
         if (!profilesFile.exists()) {
-            val defaultProfile = TimetableProfile(
-                id = "default",
-                name = "Main Timetable",
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                schedules = generateMockData(),
-                isActive = true
-            )
-            val list = listOf(defaultProfile)
-            saveAllProfiles(list)
-            return list
+            saveAllProfiles(defaultList)
+            return defaultList
         }
         
-        return try {
+        val list = try {
             val json = profilesFile.readText()
-            jsonHandler.decodeFromString<List<TimetableProfile>>(json)
+            val parsed = jsonHandler.decodeFromString<List<TimetableProfile>>(json)
+            if (parsed.isEmpty()) defaultList else parsed
         } catch (e: Exception) {
-            emptyList()
+            defaultList
         }
+
+        if (list == defaultList) {
+            saveAllProfiles(defaultList)
+        }
+        return list
     }
 
     actual fun saveAllProfiles(profiles: List<TimetableProfile>) {

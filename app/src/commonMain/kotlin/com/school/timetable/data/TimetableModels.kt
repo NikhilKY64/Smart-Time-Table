@@ -34,14 +34,20 @@ data class TimetableProfile(
     val updatedAt: Long,
     val schedules: List<DaySchedule>,
     val bellTimings: List<BellTiming>? = null,
-    val isActive: Boolean = false
-) {
-    // Companion or secondary constructor for defaults if needed, 
-    // but better to handle it in construction to keep it serializable easily.
-}
+    val isActive: Boolean = false,
+    // v1.3.0: Dynamic period configuration
+    // Backward-compatible: old profiles without these fields default to 8 periods, break after 4
+    val totalPeriods: Int = 8,
+    val breakAfterPeriods: List<Int> = listOf(4) // 1-based: e.g. 4 means break after period 4
+)
 
-// Helper to create profile since randomUUID is JVM specific
-fun createNewProfileData(name: String, schedules: List<DaySchedule>): TimetableProfile {
+// Helper to create a new profile (used by ViewModel)
+fun createNewProfileData(
+    name: String,
+    schedules: List<DaySchedule>,
+    totalPeriods: Int = 8,
+    breakAfterPeriods: List<Int> = listOf(4)
+): TimetableProfile {
     val time = System.currentTimeMillis()
     return TimetableProfile(
         id = java.util.UUID.randomUUID().toString(),
@@ -49,6 +55,8 @@ fun createNewProfileData(name: String, schedules: List<DaySchedule>): TimetableP
         createdAt = time,
         updatedAt = time,
         schedules = schedules,
+        totalPeriods = totalPeriods,
+        breakAfterPeriods = breakAfterPeriods,
         isActive = false
     )
 }
